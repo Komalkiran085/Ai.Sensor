@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+@keyframes slideIn {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.alert-enter {
+  animation: slideIn 0.3s ease-out;
+}
+
+.severity-extreme { @apply bg-red-900/50 border-red-500; }
+.severity-critical { @apply bg-orange-900/50 border-orange-500; }
+.severity-warning { @apply bg-yellow-900/50 border-yellow-500; }
+.severity-normal { @apply bg-gray-800/50 border-gray-600; }
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #1a1a2e; }
+::-webkit-scrollbar-thumb { background: #4a4a6a; border-radius: 3px; }

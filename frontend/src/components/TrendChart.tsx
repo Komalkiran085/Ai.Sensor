@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
 import { ZoneRisk } from '../App'
+import { getReading } from '../lib/readings'
 
 type DataPoint = { time: string; co: number; h2s: number; methane: number; score: number }
 
@@ -14,9 +15,9 @@ export default function TrendChart({ zoneRisks, selectedZone }: { zoneRisks: Rec
     setHistory(prev => {
       const point: DataPoint = {
         time: new Date().toLocaleTimeString('en-US', { hour12: false, minute: '2-digit', second: '2-digit' }),
-        co: data.reading?.co_ppm ?? 0,
-        h2s: data.reading?.h2s_ppm ?? 0,
-        methane: data.reading?.methane_ppm ?? 0,
+        co: getReading(data.readings, 'co_ppm') ?? 0,
+        h2s: getReading(data.readings, 'h2s_ppm') ?? 0,
+        methane: getReading(data.readings, 'methane_ppm') ?? 0,
         score: (data.risk?.compound_score ?? 0) * 100,
       }
       return [...prev.slice(-60), point]

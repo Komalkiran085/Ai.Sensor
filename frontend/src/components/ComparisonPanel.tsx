@@ -1,4 +1,5 @@
 import { ZoneRisk } from '../App'
+import { getReading } from '../lib/readings'
 import { ShieldX, ShieldCheck, ArrowRight } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -9,7 +10,7 @@ export default function ComparisonPanel({ zoneRisks }: { zoneRisks: Record<strin
 
   if (!hotZone) return null
 
-  const co = hotZone.reading?.co_ppm ?? 0
+  const co = getReading(hotZone.readings, 'co_ppm') ?? 0
   const singleSensorAlert = co >= 50
   const compoundAlert = (hotZone.risk?.compound_score ?? 0) >= 0.35
   const compoundSeverity = hotZone.risk?.severity ?? 'normal'
@@ -66,7 +67,7 @@ export default function ComparisonPanel({ zoneRisks }: { zoneRisks: Record<strin
             {compoundAlert ? compoundSeverity.toUpperCase() : 'SAFE'}
           </div>
           <p className="text-[10px] text-gray-500 mt-1">
-            Score: {((hotZone.risk?.compound_score ?? 0) * 100).toFixed(0)}% — {hotZone.zone.replace(/_/g, ' ')}
+            Score: {((hotZone.risk?.compound_score ?? 0) * 100).toFixed(0)}% — {hotZone.zone_name?.replace(/_/g, ' ') ?? hotZone.zone_id}
           </p>
           <p className="text-[10px] text-gray-600 mt-1">
             Gas + Permit + Shift combined

@@ -1,42 +1,66 @@
-import { CheckCircle, AlertCircle, Circle } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { CheckCircle, AlertCircle, HelpCircle } from 'lucide-react'
 import clsx from 'clsx'
 
-const CHECKS = [
-  { rule: 'Gas clearance before confined space entry', ref: 'OISD-GDN-237', status: 'fail' },
-  { rule: 'Hot work permit proximity check', ref: 'Factory Act Sec 7A', status: 'fail' },
-  { rule: 'Shift handover safety briefing', ref: 'DGMS Circular 2023', status: 'warn' },
-  { rule: 'Emergency evacuation drill (monthly)', ref: 'OISD-STD-116', status: 'pass' },
-  { rule: 'Fire detection system operational', ref: 'OISD-STD-189', status: 'pass' },
-  { rule: 'PPE compliance in hazardous zones', ref: 'Factory Act Sec 35', status: 'pass' },
-  { rule: 'Gas detector calibration (quarterly)', ref: 'OISD-RP-149', status: 'pass' },
-  { rule: 'Simultaneous permit conflict check', ref: 'OISD-GDN-237', status: 'fail' },
-]
+type ComplianceCheck = {
+  rule: string
+  ref: string
+  status: 'pass' | 'fail' | 'unmonitored'
+  detail: string
+}
 
-export default function CompliancePanel() {
-  const passed = CHECKS.filter(c => c.status === 'pass').length
-  const failed = CHECKS.filter(c => c.status === 'fail').length
+type ComplianceResponse = {
+  checks: ComplianceCheck[]
+  passed: number
+  failed: number
+  unmonitored: number
+}
+
+export default function CompliancePanel({ apiBase }: { apiBase: string }) {
+  const [data, setData] = useState<ComplianceResponse | null>(null)
+
+  useEffect(() => {
+    const load = () => fetch(`${apiBase}/api/compliance`).then(r => r.json()).then(setData).catch(() => {})
+    load()
+    const id = setInterval(load, 15000)
+    return () => clearInterval(id)
+  }, [apiBase])
+
+  if (!data) {
+    return (
+      <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
+        <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">Regulatory Compliance</h2>
+        <p className="text-gray-500 text-sm mt-3">Loading live compliance status…</p>
+      </div>
+    )
+  }
 
   return (
     <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">Regulatory Compliance</h2>
         <div className="flex gap-2 text-[10px]">
-          <span className="bg-green-900/50 text-green-400 px-2 py-0.5 rounded-full">{passed} passed</span>
-          <span className="bg-red-900/50 text-red-400 px-2 py-0.5 rounded-full">{failed} failed</span>
+          <span className="bg-green-900/50 text-green-400 px-2 py-0.5 rounded-full">{data.passed} passed</span>
+          <span className="bg-red-900/50 text-red-400 px-2 py-0.5 rounded-full">{data.failed} failed</span>
+          <span className="bg-gray-800 text-gray-400 px-2 py-0.5 rounded-full">{data.unmonitored} unmonitored</span>
         </div>
       </div>
-      <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
-        {CHECKS.map((c, i) => (
-          <div key={i} className={clsx('flex items-center gap-2 p-1.5 rounded-lg text-xs', {
-            'bg-green-900/10': c.status === 'pass',
-            'bg-red-900/10': c.status === 'fail',
-            'bg-yellow-900/10': c.status === 'warn',
-          })}>
+      <div className="space-y-1.5 max-h-[240px] overflow-y-auto">
+        {data.checks.map((c, i) => (
+          <div
+            key={i}
+            title={c.detail}
+            className={clsx('flex items-center gap-2 p-1.5 rounded-lg text-xs', {
+              'bg-green-900/10': c.status === 'pass',
+              'bg-red-900/10': c.status === 'fail',
+              'bg-gray-800/30': c.status === 'unmonitored',
+            })}
+          >
             {c.status === 'pass' && <CheckCircle className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />}
             {c.status === 'fail' && <AlertCircle className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />}
-            {c.status === 'warn' && <Circle className="w-3.5 h-3.5 text-yellow-500 flex-shrink-0" />}
-            <span className="text-gray-300 flex-1">{c.rule}</span>
-            <span className="text-[9px] text-gray-600 font-mono">{c.ref}</span>
+            {c.status === 'unmonitored' && <HelpCircle className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />}
+            <span className={clsx('flex-1', c.status === 'unmonitored' ? 'text-gray-500' : 'text-gray-300')}>{c.rule}</span>
+            <span className="text-[9px] text-gray-600 font-mono flex-shrink-0">{c.ref}</span>
           </div>
         ))}
       </div>

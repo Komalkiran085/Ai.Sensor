@@ -1,11 +1,22 @@
 import { Alert } from '../App'
-import { AlertTriangle, ShieldAlert, Info } from 'lucide-react'
+import { AlertTriangle, ShieldAlert, Info, Clock } from 'lucide-react'
 import clsx from 'clsx'
 
 const SEVERITY_ICON: Record<string, typeof AlertTriangle> = {
   extreme: ShieldAlert,
   critical: AlertTriangle,
   warning: Info,
+}
+
+function timeAgo(iso?: string): string {
+  if (!iso) return ''
+  const seconds = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000))
+  if (seconds < 60) return `${seconds}s ago`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
 export default function AlertFeed({ alerts }: { alerts: Alert[] }) {
@@ -33,8 +44,18 @@ export default function AlertFeed({ alerts }: { alerts: Alert[] }) {
                 })} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-bold text-gray-100">{a.zone.replace(/_/g, ' ')}</span>
-                    <span className="text-xs text-gray-400">Score: {(a.compound_score * 100).toFixed(0)}%</span>
+                    <span className="text-sm font-bold text-gray-100 flex items-center gap-2">
+                      {a.zone_name?.replace(/_/g, ' ') ?? a.zone_id}
+                      {a.sent_at && (
+                        <span title={new Date(a.sent_at).toLocaleString()} className="flex items-center gap-1 text-[10px] font-normal text-gray-500">
+                          <Clock className="w-3 h-3" /> {timeAgo(a.sent_at)}
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-xs text-gray-400">
+                      Score: {(a.compound_score * 100).toFixed(0)}%
+                      {a.lead_time_minutes != null && ` · ~${a.lead_time_minutes} min lead time`}
+                    </span>
                   </div>
                   <p className="text-xs text-gray-300 leading-relaxed">{a.explanation}</p>
                   {a.contributing_factors?.length > 0 && (

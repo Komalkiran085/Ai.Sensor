@@ -1,6 +1,8 @@
 services:
   postgres:
-    image: postgres:15-alpine
+    # Bundles TimescaleDB (sensor_readings hypertable) and pgvector (regulation
+    # embeddings) — the single-Postgres-instance decision from docs/SYSTEM_DESIGN.md §2.
+    image: timescale/timescaledb-ha:pg16
     container_name: safety_db
     environment:
       POSTGRES_USER: safety
@@ -9,23 +11,39 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/home/postgres/pgdata/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U safety -d industrial_safety"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7-alpine
-    container_name: safety_redis
+  # Local LLM for alert/report generation — a real alternative to Claude, not just a
+  # static template. See config.py's LLM_PROVIDER: "ollama" (default, this), "claude",
+  # or "auto" (Claude if a key is set, else this) — switch anytime.
+  ollama:
+    image: ollama/ollama:latest
+    container_name: safety_ollama
     ports:
-      - "6379:6379"
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 15s
+
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: safety_ollama_init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["OLLAMA_HOST=ollama:11434 ollama pull ${OLLAMA_MODEL:-qwen2.5:3b}"]
+    restart: "no"
 
   backend:
     build:
@@ -36,13 +54,16 @@ services:
       - "8000:8000"
     environment:
       - DATABASE_URL=postgresql+asyncpg://safety:safety123@postgres:5432/industrial_safety
-      - REDIS_URL=redis://redis:6379/0
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - ENVIRONMENT=production
+      - PLANT_CONFIG_PATH=plant.config.yaml
+      - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
+      - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:3b}
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
+      ollama:
         condition: service_healthy
     volumes:
       - ./backend:/app
@@ -66,3 +87,4 @@ services:
 
 volumes:
   postgres_data:
+  ollama_data:

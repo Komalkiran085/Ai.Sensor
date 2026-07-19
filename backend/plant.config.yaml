@@ -1,0 +1,122 @@
+# plant.config.yaml — everything specific to THIS plant install.
+# Filled in once at setup time, not touched again day-to-day. See docs/SYSTEM_DESIGN.md §3.1.
+# Secrets (DB password, connector credentials, LLM API key) live in .env, never here.
+
+plant:
+  name: "Demo Steel Works"
+  location: "Visakhapatnam, India"
+  timezone: "Asia/Kolkata"
+
+regulation_pack: "india-oisd-dgms-factoryact-v1"
+
+shifts:
+  pattern:
+    - { name: Morning,   start: "06:00", end: "14:00" }
+    - { name: Afternoon, start: "14:00", end: "22:00" }
+    - { name: Night,     start: "22:00", end: "06:00" }
+  changeover_window_minutes: 15
+  fatigue_after_hours: 6
+
+zones:
+  - id: battery_3
+    name: "Coke Oven Battery 3"
+    hazard_classification: high
+    # Long strip footprint — a real coke oven battery is a row of oven cells, not a square building.
+    boundary: [[240, 70], [620, 70], [620, 150], [240, 150]]
+    equipment:
+      - { id: coke-oven-1, type: coke_oven, install_date: "2011-03-01" }
+    sensors:
+      - { id: S-47, type: co_ppm,      unit: ppm, thresholds: { warning: 35,  critical: 50,  extreme: 75 }, calibration_date: "2026-06-01" }
+      - { id: S-48, type: h2s_ppm,     unit: ppm, thresholds: { warning: 5,   critical: 10,  extreme: 20 }, calibration_date: "2026-02-01" }
+      - { id: S-49, type: methane_ppm, unit: ppm, thresholds: { warning: 300, critical: 450, extreme: 600 }, calibration_date: "2026-05-15" }
+      - { id: S-50, type: temperature, unit: "°C", thresholds: { warning: 42, critical: 50,  extreme: 60 }, calibration_date: "2025-10-01" }
+
+  - id: control_room
+    name: "Main Control Room"
+    hazard_classification: low
+    # Smallest footprint on site — control rooms are compact compared to process buildings.
+    boundary: [[320, 290], [420, 290], [420, 360], [320, 360]]
+    equipment:
+      - { id: control-panel-1, type: scada_panel, install_date: "2015-06-01" }
+    sensors:
+      - { id: S-12, type: co_ppm, unit: ppm, thresholds: { warning: 35, critical: 50, extreme: 75 }, calibration_date: "2026-07-01" }
+
+  - id: storage_tank_a
+    name: "Chemical Storage A"
+    hazard_classification: high
+    # Round tank footprint, approximated as a 12-point polygon (center 700,110 · r 55).
+    boundary: [[755,110], [747.6,137.5], [727.5,157.6], [700,165], [672.5,157.6], [652.4,137.5],
+               [645,110], [652.4,82.5], [672.5,62.4], [700,55], [727.5,62.4], [747.6,82.5]]
+    equipment:
+      - { id: storage-tank-1, type: chemical_tank, install_date: "2009-11-15" }
+    sensors:
+      - { id: S-23, type: co_ppm,  unit: ppm, thresholds: { warning: 35, critical: 50, extreme: 75 }, calibration_date: "2026-04-01" }
+      - { id: S-24, type: h2s_ppm, unit: ppm, thresholds: { warning: 5,  critical: 10, extreme: 20 }, calibration_date: "2026-06-20" }
+
+  - id: workshop_b
+    name: "Maintenance Workshop B"
+    hazard_classification: medium
+    boundary: [[60, 260], [260, 260], [260, 370], [60, 370]]
+    equipment:
+      - { id: workshop-bench-1, type: workbench, install_date: "2018-02-20" }
+    sensors:
+      - { id: S-31, type: co_ppm,  unit: ppm, thresholds: { warning: 35, critical: 50, extreme: 75 }, calibration_date: "2026-03-01" }
+      - { id: S-32, type: h2s_ppm, unit: ppm, thresholds: { warning: 5,  critical: 10, extreme: 20 }, calibration_date: "2026-06-10" }
+
+  - id: blast_furnace_1
+    name: "Blast Furnace 1"
+    hazard_classification: high
+    # Round silo footprint, approximated as a 12-point polygon (center 130,120 · r 75).
+    boundary: [[205,120], [194.95,157.5], [167.5,184.95], [130,195], [92.5,184.95], [65.05,157.5],
+               [55,120], [65.05,82.5], [92.5,55.05], [130,45], [167.5,55.05], [194.95,82.5]]
+    equipment:
+      - { id: blast-furnace-1, type: blast_furnace, install_date: "2005-09-10" }
+    sensors:
+      - { id: S-55, type: co_ppm,      unit: ppm,  thresholds: { warning: 35, critical: 50, extreme: 75 }, calibration_date: "2026-01-01" }
+      - { id: S-56, type: h2s_ppm,     unit: ppm,  thresholds: { warning: 5,  critical: 10, extreme: 20 }, calibration_date: "2026-06-25" }
+      - { id: S-57, type: temperature, unit: "°C", thresholds: { warning: 42, critical: 50, extreme: 60 }, calibration_date: "2025-12-01" }
+
+  - id: utility_area
+    name: "Utility & Services"
+    hazard_classification: low
+    # Irregular L-shaped yard — utility areas are rarely a clean rectangle in a real plant.
+    boundary: [[480,260], [650,260], [650,300], [750,300], [750,380], [480,380]]
+    equipment:
+      - { id: utility-plant-1, type: utility_plant, install_date: "2012-01-01" }
+    sensors:
+      - { id: S-70, type: co_ppm, unit: ppm, thresholds: { warning: 35, critical: 50, extreme: 75 }, calibration_date: "2026-05-01" }
+
+connectors:
+  scada:           { adapter: simulated }
+  permit_system:   { adapter: simulated }
+  shift_roster:    { adapter: simulated }
+  worker_location: { adapter: simulated }
+
+agents:
+  gas_agent: true
+  permit_agent: true
+  shift_agent: true
+  vision_agent: false      # no CCTV integration at this install yet
+  compliance_agent: true
+  incident_agent: true
+
+automation:
+  # Default cutoff (see agents/automation.py): human confirmation is required for any
+  # state-changing action (permit suspension, evacuation) from `critical` severity up;
+  # `normal`/`warning` never trigger state-changing actions in the first place.
+  overrides:
+    confined_space_entry:
+      human_confirm_from: warning   # zero-tolerance hazard type — stricter than the critical default
+
+# Named scenarios for demo/training/tabletop-drill purposes — pick any zone and describe
+# what it's replaying. A different plant's config would define its own, pointing at its
+# own zones and its own history; this one recreates the incident this project is named for.
+demo_scenarios:
+  - id: vizag
+    label: "Vizag Scenario (Jan 2025)"
+    zone_id: battery_3
+    description: >
+      Recreates the conditions behind the January 2025 Visakhapatnam Steel Plant coke oven
+      battery explosion: gas readings climbing during an active confined-space entry permit,
+      compounded by a shift changeover — the exact combination the plant's own gas sensors
+      recorded but no system connected in time.

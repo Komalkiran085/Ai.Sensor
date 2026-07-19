@@ -21,7 +21,7 @@ export default function PermitPanel({ permits, onSuspend }: Props) {
               <HardHat className={clsx('w-4 h-4', p.status === 'suspended' ? 'text-red-400' : 'text-blue-400')} />
               <div>
                 <div className="text-xs font-bold text-gray-200">{p.permit_id}</div>
-                <div className="text-[10px] text-gray-400">{p.worker_name} • {p.work_type?.replace(/_/g, ' ')} • {p.zone?.replace(/_/g, ' ')}</div>
+                <div className="text-[10px] text-gray-400">{p.worker_name} • {p.work_type?.replace(/_/g, ' ')} • {p.zone_id?.replace(/_/g, ' ')}</div>
               </div>
             </div>
             {p.status === 'active' ? (

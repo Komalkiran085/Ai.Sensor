@@ -1,101 +1,118 @@
-import { ZoneRisk } from '../App'
-import clsx from 'clsx'
+import { ZoneRisk, ZoneMeta, WorkerLocation } from '../App'
 
-const ZONE_LAYOUT: Record<string, { x: number; y: number; w: number; h: number }> = {
-  BLAST_FURNACE_1: { x: 50, y: 30, w: 200, h: 120 },
-  BATTERY_3:       { x: 280, y: 30, w: 200, h: 120 },
-  STORAGE_TANK_A:  { x: 510, y: 30, w: 180, h: 120 },
-  WORKSHOP_B:      { x: 50, y: 180, w: 200, h: 110 },
-  CONTROL_ROOM:    { x: 280, y: 180, w: 200, h: 110 },
-  UTILITY_AREA:    { x: 510, y: 180, w: 180, h: 110 },
+const WORKER_COLOR = '#38bdf8' // sky-blue — a distinct hue from the severity palette, since this is a different signal (presence, not risk)
+
+function initials(name: string): string {
+  return name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase()
 }
 
-const ZONE_LABELS: Record<string, string> = {
-  BLAST_FURNACE_1: 'Blast Furnace 1',
-  BATTERY_3: 'Coke Oven Battery 3',
-  STORAGE_TANK_A: 'Chemical Storage A',
-  WORKSHOP_B: 'Workshop B',
-  CONTROL_ROOM: 'Control Room',
-  UTILITY_AREA: 'Utility Area',
+// Severity palette — validated for CVD + normal-vision separation between adjacent
+// steps (dataviz skill: worst adjacent pair ΔE 15.3 CVD / 20.7 normal, both pass).
+// Never rely on color alone — every zone also carries a text severity label.
+const SEVERITY_COLORS: Record<string, { fill: string; stroke: string; text: string; glow: string }> = {
+  extreme:  { fill: '#5c0a22', stroke: '#fb7185', text: '#fecdd3', glow: 'rgba(251,113,133,0.55)' },
+  critical: { fill: '#9a3412', stroke: '#fb923c', text: '#fed7aa', glow: 'rgba(251,146,60,0.5)' },
+  warning:  { fill: '#854d0e', stroke: '#fde047', text: '#fef9c3', glow: 'rgba(253,224,71,0.45)' },
+  normal:   { fill: '#1e2b3f', stroke: '#64748b', text: '#cbd5e1', glow: 'transparent' },
 }
 
-const SEVERITY_COLORS: Record<string, { fill: string; stroke: string; text: string }> = {
-  extreme:  { fill: '#7f1d1d', stroke: '#ef4444', text: '#fca5a5' },
-  critical: { fill: '#7c2d12', stroke: '#f97316', text: '#fdba74' },
-  warning:  { fill: '#78350f', stroke: '#eab308', text: '#fde047' },
-  normal:   { fill: '#1e293b', stroke: '#475569', text: '#94a3b8' },
-}
+export default function PlantMap({
+  zones, zoneRisks, workers, onZoneClick,
+}: {
+  zones: Record<string, ZoneMeta>
+  zoneRisks: Record<string, ZoneRisk>
+  workers: WorkerLocation[]
+  onZoneClick: (zoneId: string) => void
+}) {
+  const workersByZone: Record<string, WorkerLocation[]> = {}
+  for (const w of workers) {
+    (workersByZone[w.zone_id] ??= []).push(w)
+  }
+  const zoneList = Object.values(zones)
 
-export default function PlantMap({ zoneRisks, onZoneClick }: { zoneRisks: Record<string, ZoneRisk>; onZoneClick: (zone: string) => void }) {
   return (
     <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
-      <h2 className="text-sm font-semibold text-gray-300 mb-3 uppercase tracking-wider">Plant Geospatial Heatmap</h2>
-      <svg viewBox="0 0 740 320" className="w-full" style={{ maxHeight: '400px' }}>
-        {/* Grid background */}
-        <defs>
-          <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
-            <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#1e293b" strokeWidth="0.5" />
-          </pattern>
-        </defs>
-        <rect width="740" height="320" fill="#0f172a" rx="8" />
-        <rect width="740" height="320" fill="url(#grid)" rx="8" />
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">Plant Risk Heatmap</h2>
+        <span className="text-[10px] text-gray-600 uppercase tracking-wider">{zoneList.length} zones</span>
+      </div>
 
-        {Object.entries(ZONE_LAYOUT).map(([zoneId, pos]) => {
-          const risk = zoneRisks[zoneId]
-          const severity = risk?.risk?.severity || 'normal'
-          const colors = SEVERITY_COLORS[severity] || SEVERITY_COLORS.normal
-          const score = risk?.risk?.compound_score ?? 0
-          const co = risk?.reading?.co_ppm ?? '-'
+      <div className="flex gap-4">
+        <div className="flex-1 grid grid-cols-3 grid-rows-2 gap-3" style={{ minHeight: '360px' }}>
+          {zoneList.map(zone => {
+            const risk = zoneRisks[zone.zone_id]
+            const severity = risk?.risk?.severity || 'normal'
+            const colors = SEVERITY_COLORS[severity] || SEVERITY_COLORS.normal
+            const score = risk?.risk?.compound_score ?? 0
+            const isHot = severity === 'extreme' || severity === 'critical'
+            const zoneWorkers = workersByZone[zone.zone_id] || []
 
-          return (
-            <g key={zoneId} onClick={() => onZoneClick(zoneId)} className="cursor-pointer">
-              <rect
-                x={pos.x} y={pos.y} width={pos.w} height={pos.h}
-                rx={6}
-                fill={colors.fill}
-                stroke={colors.stroke}
-                strokeWidth={severity === 'extreme' || severity === 'critical' ? 2.5 : 1.5}
-                opacity={0.9}
+            return (
+              <button
+                key={zone.zone_id}
+                onClick={() => onZoneClick(zone.zone_id)}
+                className="relative rounded-lg border-2 p-3 flex flex-col justify-between text-left transition-transform hover:scale-[1.02] focus:outline-none"
+                style={{
+                  backgroundColor: colors.fill,
+                  borderColor: colors.stroke,
+                  boxShadow: severity !== 'normal' ? `0 0 14px 1px ${colors.glow}` : 'none',
+                  animation: isHot ? 'pulseCell 1.6s ease-in-out infinite' : undefined,
+                }}
               >
-                {(severity === 'extreme' || severity === 'critical') && (
-                  <animate attributeName="opacity" values="0.9;0.5;0.9" dur="1.5s" repeatCount="indefinite" />
-                )}
-              </rect>
+                <div>
+                  <div className="text-[13px] font-bold leading-tight" style={{ color: colors.text }}>
+                    {zone.name}
+                  </div>
+                  <div
+                    className="text-[9.5px] font-semibold uppercase tracking-wider mt-0.5"
+                    style={{ color: colors.stroke }}
+                  >
+                    {severity}
+                  </div>
+                </div>
 
-              <text x={pos.x + pos.w / 2} y={pos.y + 22} textAnchor="middle" fontSize="11" fontWeight="bold" fill={colors.text}>
-                {ZONE_LABELS[zoneId]}
-              </text>
+                <div className="flex items-end justify-between mt-3">
+                  <div className="flex -space-x-2">
+                    {zoneWorkers.map(w => (
+                      <div
+                        key={w.worker_id}
+                        title={`${w.name} — ${w.role}`}
+                        className="w-6 h-6 rounded-full flex items-center justify-center text-[8px] font-bold border"
+                        style={{ backgroundColor: WORKER_COLOR, borderColor: colors.fill, color: '#04222f' }}
+                      >
+                        {initials(w.name)}
+                      </div>
+                    ))}
+                  </div>
+                  <div
+                    className="rounded px-2 py-0.5 text-[11px] font-extrabold"
+                    style={{ backgroundColor: `${colors.stroke}38`, color: colors.text }}
+                  >
+                    {(score * 100).toFixed(0)}%
+                  </div>
+                </div>
+              </button>
+            )
+          })}
+        </div>
 
-              <text x={pos.x + pos.w / 2} y={pos.y + 45} textAnchor="middle" fontSize="10" fill="#94a3b8">
-                CO: {co} ppm
-              </text>
-
-              <text x={pos.x + pos.w / 2} y={pos.y + 65} textAnchor="middle" fontSize="10" fill="#94a3b8">
-                H2S: {risk?.reading?.h2s_ppm ?? '-'} ppm
-              </text>
-
-              {/* Risk score badge */}
-              <rect x={pos.x + pos.w - 55} y={pos.y + pos.h - 30} width={45} height={20} rx={4} fill={colors.stroke} opacity={0.3} />
-              <text x={pos.x + pos.w - 32} y={pos.y + pos.h - 16} textAnchor="middle" fontSize="10" fontWeight="bold" fill={colors.text}>
-                {(score * 100).toFixed(0)}%
-              </text>
-
-              {/* Severity label */}
-              <text x={pos.x + 10} y={pos.y + pos.h - 12} fontSize="9" fontWeight="600" fill={colors.stroke} style={{ textTransform: 'uppercase' }}>
-                {severity.toUpperCase()}
-              </text>
-            </g>
-          )
-        })}
-      </svg>
-
-      <div className="flex items-center gap-4 mt-3 justify-center">
-        {['normal', 'warning', 'critical', 'extreme'].map(s => (
-          <div key={s} className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: SEVERITY_COLORS[s].stroke }} />
-            <span className="text-xs text-gray-400 capitalize">{s}</span>
-          </div>
-        ))}
+        {/* Legend — discrete severity scale, since each cell holds one category rather
+            than a continuous value */}
+        <div className="flex flex-col items-center gap-2 pt-1">
+          <span className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Legend</span>
+          {['extreme', 'critical', 'warning', 'normal'].map(s => (
+            <div key={s} className="flex flex-col items-center gap-1">
+              <div
+                className="w-8 h-8 rounded border"
+                style={{ backgroundColor: SEVERITY_COLORS[s].fill, borderColor: SEVERITY_COLORS[s].stroke }}
+              />
+              <span className="text-[9px] text-gray-400 capitalize">{s}</span>
+            </div>
+          ))}
+          <div className="w-px h-3" />
+          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: WORKER_COLOR }} />
+          <span className="text-[9px] text-gray-400 text-center leading-tight">Worker<br />present</span>
+        </div>
       </div>
     </div>
   )

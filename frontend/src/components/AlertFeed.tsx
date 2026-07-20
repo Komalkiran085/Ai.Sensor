@@ -26,7 +26,7 @@ export default function AlertFeed({ alerts }: { alerts: Alert[] }) {
         <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">Alert Feed</h2>
         <span className="text-xs bg-red-900/50 text-red-400 px-2 py-0.5 rounded-full">{alerts.length} alerts</span>
       </div>
-      <div className="space-y-2 max-h-[300px] overflow-y-auto">
+      <div className="space-y-2 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 160px)' }}>
         {alerts.length === 0 && <p className="text-gray-500 text-sm">No alerts — all clear.</p>}
         {alerts.map((a, i) => {
           const Icon = SEVERITY_ICON[a.severity] || Info

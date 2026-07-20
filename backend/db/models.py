@@ -1,14 +1,19 @@
 from datetime import datetime, date, time
 import enum
 
-from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     String, Float, DateTime, Date, Time, JSON, Boolean, Integer, ForeignKey, Text
 )
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
-from db.database import Base
+from db.database import Base, is_postgres
+
+if is_postgres:
+    from pgvector.sqlalchemy import Vector
+    _embedding_col = lambda: mapped_column(Vector(384), nullable=True)
+else:
+    _embedding_col = lambda: mapped_column(JSON, nullable=True)
 
 
 class AlertSeverity(str, enum.Enum):
@@ -68,10 +73,8 @@ class Camera(Base):
 
 class SensorReading(Base):
     __tablename__ = "sensor_readings"
-    # Composite PK (id, ts): a TimescaleDB hypertable requires the partitioning column
-    # to be part of every unique constraint, including the primary key.
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), primary_key=True)
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), primary_key=is_postgres, index=True)
     sensor_id: Mapped[str] = mapped_column(ForeignKey("sensors.id"), index=True)
     zone_id: Mapped[str] = mapped_column(ForeignKey("zones.id"), index=True)
     value: Mapped[float] = mapped_column(Float)
@@ -142,7 +145,7 @@ class Regulation(Base):
     content: Mapped[str] = mapped_column(Text)
     pack: Mapped[str] = mapped_column(String(100), index=True)
     # 384 dims to match embeddings/local.py's BAAI/bge-small-en-v1.5 output.
-    embedding: Mapped[list | None] = mapped_column(Vector(384), nullable=True)
+    embedding: Mapped[list | None] = _embedding_col()
 
 
 class Incident(Base):
@@ -154,7 +157,7 @@ class Incident(Base):
     severity: Mapped[str] = mapped_column(String(20))
     contributing_factors: Mapped[list] = mapped_column(JSON, default=list)
     root_cause: Mapped[str] = mapped_column(Text, default="")
-    embedding: Mapped[list | None] = mapped_column(Vector(384), nullable=True)
+    embedding: Mapped[list | None] = _embedding_col()
 
 
 class NearMiss(Base):
@@ -164,7 +167,7 @@ class NearMiss(Base):
     report_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     description: Mapped[str] = mapped_column(Text)
     reported_by: Mapped[str] = mapped_column(String(200), default="")
-    embedding: Mapped[list | None] = mapped_column(Vector(384), nullable=True)
+    embedding: Mapped[list | None] = _embedding_col()
 
 
 # ── Risk & response ───────────────────────────────────────────────────────────

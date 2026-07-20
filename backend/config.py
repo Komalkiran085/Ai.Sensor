@@ -3,7 +3,7 @@ from functools import lru_cache
 
 
 class Settings(BaseSettings):
-    DATABASE_URL: str = "postgresql+asyncpg://safety:safety123@localhost:5432/industrial_safety"
+    DATABASE_URL: str = "sqlite+aiosqlite:///./safety.db"
     ANTHROPIC_API_KEY: str = ""
     ENVIRONMENT: str = "development"
     PLANT_CONFIG_PATH: str = "plant.config.yaml"

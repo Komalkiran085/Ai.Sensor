@@ -9,3 +9,4 @@ venv/
 .DS_Store
 postgres_data/
 chroma_db/
+backend/safety.db

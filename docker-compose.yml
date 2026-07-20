@@ -18,32 +18,8 @@ services:
       timeout: 5s
       retries: 5
 
-  # Local LLM for alert/report generation — a real alternative to Claude, not just a
-  # static template. See config.py's LLM_PROVIDER: "ollama" (default, this), "claude",
-  # or "auto" (Claude if a key is set, else this) — switch anytime.
-  ollama:
-    image: ollama/ollama:latest
-    container_name: safety_ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    healthcheck:
-      test: ["CMD", "ollama", "list"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 15s
-
-  ollama-init:
-    image: ollama/ollama:latest
-    container_name: safety_ollama_init
-    depends_on:
-      ollama:
-        condition: service_healthy
-    entrypoint: ["/bin/sh", "-c"]
-    command: ["OLLAMA_HOST=ollama:11434 ollama pull ${OLLAMA_MODEL:-qwen2.5:3b}"]
-    restart: "no"
+  # Ollama (local LLM) is disabled here to save disk/RAM — see config.py's LLM_PROVIDER.
+  # Set LLM_PROVIDER=ollama and re-add the ollama/ollama-init services below to switch back.
 
   backend:
     build:
@@ -57,13 +33,9 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - ENVIRONMENT=production
       - PLANT_CONFIG_PATH=plant.config.yaml
-      - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
-      - OLLAMA_URL=http://ollama:11434
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:3b}
+      - LLM_PROVIDER=${LLM_PROVIDER:-claude}
     depends_on:
       postgres:
-        condition: service_healthy
-      ollama:
         condition: service_healthy
     volumes:
       - ./backend:/app
@@ -87,4 +59,3 @@ services:
 
 volumes:
   postgres_data:
-  ollama_data:

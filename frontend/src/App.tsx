@@ -9,14 +9,15 @@ import ShiftInfo from './components/ShiftInfo'
 import DemoControls from './components/DemoControls'
 import ReportModal from './components/ReportModal'
 import Header from './components/Header'
-import StatsBar from './components/StatsBar'
+
+type View = 'dashboard' | 'audit' | 'alerts'
 import TrendChart from './components/TrendChart'
 import ComparisonPanel from './components/ComparisonPanel'
 import DataSourceSelector from './components/DataSourceSelector'
 import CompliancePanel from './components/CompliancePanel'
 import PendingActions from './components/PendingActions'
 import AuditPage from './components/AuditPage'
-import type { View } from './components/Header'
+import StatsBar from './components/StatsBar'
 
 const WS_URL = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.hostname}:8000/ws`
 const API = `http://${window.location.hostname}:8000`
@@ -213,13 +214,48 @@ export default function App() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-gray-950">
-      <Header connected={connected} scenarioActive={scenarioActive} view={view} onViewChange={setView} />
+    <div className="min-h-screen bg-gray-950 flex flex-col">
+      <Header connected={connected} scenarioActive={scenarioActive} />
 
-      {view === 'audit' ? (
-        <AuditPage zones={zones} apiBase={API} />
-      ) : (
-      <main className="max-w-[1600px] mx-auto p-4 space-y-4">
+      <div className="flex flex-1 overflow-hidden">
+        {/* Left Sidebar */}
+        <aside className="w-16 bg-gray-900 border-r border-gray-800 flex flex-col items-center py-4 gap-2 shrink-0">
+          <button
+            onClick={() => setView('dashboard')}
+            className={`flex flex-col items-center gap-1 p-2 rounded-lg transition w-12 ${view === 'dashboard' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'}`}
+            title="Dashboard"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            <span className="text-[10px] leading-none">Board</span>
+          </button>
+          <button
+            onClick={() => setView('audit')}
+            className={`flex flex-col items-center gap-1 p-2 rounded-lg transition w-12 ${view === 'audit' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'}`}
+            title="Audit Trail"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h6"/></svg>
+            <span className="text-[10px] leading-none">Audit</span>
+          </button>
+          <button
+            onClick={() => setView('alerts')}
+            className={`flex flex-col items-center gap-1 p-2 rounded-lg transition w-12 ${view === 'alerts' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'}`}
+            title="Alert Feed"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+            <span className="text-[10px] leading-none">Alerts</span>
+          </button>
+        </aside>
+
+        {/* Main Content */}
+        <div className="flex-1 overflow-auto">
+          {view === 'audit' ? (
+            <AuditPage zones={zones} apiBase={API} />
+          ) : view === 'alerts' ? (
+            <div className="h-full overflow-auto p-4">
+              <AlertFeed alerts={alerts} />
+            </div>
+          ) : (
+          <main className="max-w-[1600px] mx-auto p-4 space-y-4">
         <StatsBar zoneRisks={zoneRisks} alerts={alerts} permits={permits} />
 
         <div className="flex gap-4 items-stretch flex-wrap">
@@ -252,15 +288,14 @@ export default function App() {
         </div>
 
         <div className="grid grid-cols-12 gap-4">
-          <div className="col-span-8">
-            <AlertFeed alerts={alerts} />
-          </div>
-          <div className="col-span-4">
+          <div className="col-span-12">
             <CompliancePanel apiBase={API} />
           </div>
         </div>
       </main>
       )}
+        </div>
+      </div>
 
       {reportZone && view === 'dashboard' && (
         <ReportModal

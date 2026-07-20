@@ -20,7 +20,7 @@ BASELINES: dict[str, tuple[float, float]] = {
     "temperature": (28, 38),
 }
 
-SCENARIO_RAMP_SECONDS = 180
+SCENARIO_RAMP_SECONDS = 2
 
 
 class SimulatedSCADAAdapter(SCADAAdapter):
@@ -58,8 +58,8 @@ class SimulatedSCADAAdapter(SCADAAdapter):
 
     def trigger_scenario(self, zone_id: str) -> None:
         """Demo-only: ramps every sensor in a zone toward its extreme threshold over
-        ~3 minutes, so a compound-risk scenario (e.g. Vizag-style gas buildup) can be
-        demonstrated without waiting for a real incident."""
+        a couple of seconds, so a compound-risk scenario (e.g. Vizag-style gas buildup)
+        shows up on the very next orchestrator tick instead of making the demo wait."""
         self._scenario_zone = zone_id
         self._scenario_start = time.time()
 
@@ -81,7 +81,8 @@ class SimulatedPermitAdapter(PermitAdapter):
         }
         self._permits: list[dict] = []
         counter = 2094
-        for zone in zones:
+        worker_names = ["Rajesh Kumar", "Sneha Patel", "Vikram Singh"]
+        for idx, zone in enumerate(zones):
             seed = seed_by_zone.get(zone.id)
             if not seed:
                 continue
@@ -89,7 +90,7 @@ class SimulatedPermitAdapter(PermitAdapter):
             self._permits.append({
                 "permit_id": f"PTW-{counter}",
                 "zone_id": zone.id,
-                "worker_name": "Demo Worker",
+                "worker_name": worker_names[idx % len(worker_names)],
                 "work_type": work_type,
                 "risk_class": risk_class,
                 "status": "active",

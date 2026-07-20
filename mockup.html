@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body { background: #111; display: flex; gap: 40px; justify-content: center; align-items: center; min-height: 100vh; margin: 0; font-family: sans-serif; flex-direction: column; }
+  h2 { color: #aaa; font-size: 14px; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 4px; }
+  .label { color: #999; font-size: 11px; margin-bottom: 12px; }
+  .container { display: flex; gap: 40px; }
+  .panel { text-align: center; }
+  svg { border-radius: 8px; border: 1px solid #333; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="panel">
+    <h2>Current Design</h2>
+    <p class="label">Flat colors per zone, subtle bleed</p>
+    <svg width="600" height="400" viewBox="0 0 600 400">
+      <defs>
+        <!-- Current: each zone is mostly its own flat color -->
+      </defs>
+      <!-- Row 1 -->
+      <!-- Blast Furnace - light green/yellow (20% risk) -->
+      <rect x="0" y="0" width="200" height="200" fill="hsl(72, 70%, 65%)" />
+      <!-- Coke Oven Battery 3 - red (EXTREME 100%) -->
+      <rect x="200" y="0" width="200" height="200" fill="hsl(0, 92%, 34%)" />
+      <!-- Chemical Storage - green (0%) -->
+      <rect x="400" y="0" width="200" height="200" fill="hsl(118, 62%, 45%)" />
+
+      <!-- Row 2 -->
+      <!-- Maintenance Workshop - green (14%) -->
+      <rect x="0" y="200" width="200" height="200" fill="hsl(95, 64%, 56%)" />
+      <!-- Main Control Room - green (0%) -->
+      <rect x="200" y="200" width="200" height="200" fill="hsl(118, 62%, 45%)" />
+      <!-- Utility & Services - green (0%) -->
+      <rect x="400" y="200" width="200" height="200" fill="hsl(118, 62%, 45%)" />
+
+      <!-- Zone borders -->
+      <g stroke="#000" stroke-width="3" fill="none">
+        <rect x="0" y="0" width="200" height="200"/>
+        <rect x="200" y="0" width="200" height="200"/>
+        <rect x="400" y="0" width="200" height="200"/>
+        <rect x="0" y="200" width="200" height="200"/>
+        <rect x="200" y="200" width="200" height="200"/>
+        <rect x="400" y="200" width="200" height="200"/>
+      </g>
+      <g stroke="rgba(255,255,255,0.5)" stroke-width="1" fill="none">
+        <rect x="0" y="0" width="200" height="200"/>
+        <rect x="200" y="0" width="200" height="200"/>
+        <rect x="400" y="0" width="200" height="200"/>
+        <rect x="0" y="200" width="200" height="200"/>
+        <rect x="200" y="200" width="200" height="200"/>
+        <rect x="400" y="200" width="200" height="200"/>
+      </g>
+
+      <!-- Labels -->
+      <text x="100" y="80" text-anchor="middle" fill="#333" font-weight="bold" font-size="13">Blast Furnace 1</text>
+      <text x="100" y="100" text-anchor="middle" fill="#333" font-size="11">NORMAL  20%</text>
+      <text x="300" y="80" text-anchor="middle" fill="#fff" font-weight="bold" font-size="13">Coke Oven Battery 3</text>
+      <text x="300" y="100" text-anchor="middle" fill="#fff" font-size="11">EXTREME  100%</text>
+      <text x="500" y="80" text-anchor="middle" fill="#333" font-weight="bold" font-size="13">Chemical Storage A</text>
+      <text x="500" y="100" text-anchor="middle" fill="#333" font-size="11">NORMAL  0%</text>
+      <text x="100" y="280" text-anchor="middle" fill="#333" font-weight="bold" font-size="13">Maintenance Workshop</text>
+      <text x="100" y="300" text-anchor="middle" fill="#333" font-size="11">NORMAL  14%</text>
+      <text x="300" y="280" text-anchor="middle" fill="#333" font-weight="bold" font-size="13">Main Control Room</text>
+      <text x="300" y="300" text-anchor="middle" fill="#333" font-size="11">NORMAL  0%</text>
+      <text x="500" y="280" text-anchor="middle" fill="#333" font-weight="bold" font-size="13">Utility & Services</text>
+      <text x="500" y="300" text-anchor="middle" fill="#333" font-size="11">NORMAL  0%</text>
+    </svg>
+  </div>
+
+  <div class="panel">
+    <h2>Proposed Design</h2>
+    <p class="label">Dense red center + gradient bleed into neighbors</p>
+    <svg width="600" height="400" viewBox="0 0 600 400">
+      <defs>
+        <!-- Radial gradient from Coke Oven center bleeding outward -->
+        <radialGradient id="bleed" cx="300" cy="100" r="350" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="hsl(0, 95%, 28%)" />
+          <stop offset="15%" stop-color="hsl(0, 92%, 34%)" />
+          <stop offset="30%" stop-color="hsl(5, 85%, 42%)" />
+          <stop offset="45%" stop-color="hsl(15, 75%, 52%)" />
+          <stop offset="55%" stop-color="hsl(30, 70%, 60%)" />
+          <stop offset="65%" stop-color="hsl(50, 70%, 65%)" />
+          <stop offset="80%" stop-color="hsl(90, 60%, 55%)" />
+          <stop offset="100%" stop-color="hsl(118, 62%, 45%)" />
+        </radialGradient>
+
+        <!-- Blast Furnace: gradient from right edge (red bleed) to left (own green/yellow) -->
+        <linearGradient id="bf-grad" x1="200" y1="100" x2="0" y2="100" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="hsl(10, 70%, 46%)" />
+          <stop offset="15%" stop-color="hsl(18, 72%, 52%)" />
+          <stop offset="35%" stop-color="hsl(35, 74%, 60%)" />
+          <stop offset="60%" stop-color="hsl(55, 72%, 64%)" />
+          <stop offset="100%" stop-color="hsl(72, 70%, 65%)" />
+        </linearGradient>
+
+        <!-- Chemical Storage: gradient from left edge (red bleed) to right (own green) -->
+        <linearGradient id="cs-grad" x1="400" y1="100" x2="600" y2="100" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="hsl(10, 70%, 46%)" />
+          <stop offset="15%" stop-color="hsl(18, 70%, 52%)" />
+          <stop offset="35%" stop-color="hsl(40, 66%, 58%)" />
+          <stop offset="60%" stop-color="hsl(75, 60%, 52%)" />
+          <stop offset="100%" stop-color="hsl(118, 62%, 45%)" />
+        </linearGradient>
+
+        <!-- Main Control: gradient from top (red bleed) to bottom (own green) -->
+        <linearGradient id="mc-grad" x1="300" y1="200" x2="300" y2="400" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="hsl(10, 70%, 46%)" />
+          <stop offset="15%" stop-color="hsl(20, 68%, 52%)" />
+          <stop offset="35%" stop-color="hsl(42, 64%, 58%)" />
+          <stop offset="60%" stop-color="hsl(80, 58%, 52%)" />
+          <stop offset="100%" stop-color="hsl(118, 62%, 45%)" />
+        </linearGradient>
+
+        <!-- Maintenance: gradient from top-right corner to bottom-left -->
+        <linearGradient id="mw-grad" x1="200" y1="200" x2="0" y2="400" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="hsl(18, 65%, 50%)" />
+          <stop offset="20%" stop-color="hsl(35, 62%, 56%)" />
+          <stop offset="50%" stop-color="hsl(60, 62%, 58%)" />
+          <stop offset="100%" stop-color="hsl(95, 64%, 56%)" />
+        </linearGradient>
+
+        <!-- Utility: gradient from top-left corner to bottom-right -->
+        <linearGradient id="us-grad" x1="400" y1="200" x2="600" y2="400" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="hsl(18, 65%, 50%)" />
+          <stop offset="20%" stop-color="hsl(35, 62%, 56%)" />
+          <stop offset="50%" stop-color="hsl(60, 62%, 58%)" />
+          <stop offset="100%" stop-color="hsl(118, 62%, 45%)" />
+        </linearGradient>
+      </defs>
+
+      <!-- Row 1 -->
+      <!-- Blast Furnace - green fading to light red at right edge -->
+      <rect x="0" y="0" width="200" height="200" fill="url(#bf-grad)" />
+      <!-- Coke Oven Battery 3 - Rich red with radial glow from center -->
+      <defs>
+        <radialGradient id="coke-center" cx="50%" cy="50%" r="70%">
+          <stop offset="0%" stop-color="hsl(0, 88%, 38%)" />
+          <stop offset="40%" stop-color="hsl(2, 82%, 35%)" />
+          <stop offset="75%" stop-color="hsl(5, 75%, 40%)" />
+          <stop offset="100%" stop-color="hsl(10, 70%, 46%)" />
+        </radialGradient>
+      </defs>
+      <rect x="200" y="0" width="200" height="200" fill="url(#coke-center)" />
+      <!-- Chemical Storage - green fading to light red at left edge -->
+      <rect x="400" y="0" width="200" height="200" fill="url(#cs-grad)" />
+
+      <!-- Row 2 -->
+      <!-- Maintenance Workshop - green with slight bleed at top-right -->
+      <rect x="0" y="200" width="200" height="200" fill="url(#mw-grad)" />
+      <!-- Main Control Room - green fading to light red at top -->
+      <rect x="200" y="200" width="200" height="200" fill="url(#mc-grad)" />
+      <!-- Utility & Services - green with slight bleed at top-left -->
+      <rect x="400" y="200" width="200" height="200" fill="url(#us-grad)" />
+
+      <!-- Zone borders -->
+      <g stroke="#000" stroke-width="3" fill="none">
+        <rect x="0" y="0" width="200" height="200"/>
+        <rect x="200" y="0" width="200" height="200"/>
+        <rect x="400" y="0" width="200" height="200"/>
+        <rect x="0" y="200" width="200" height="200"/>
+        <rect x="200" y="200" width="200" height="200"/>
+        <rect x="400" y="200" width="200" height="200"/>
+      </g>
+      <g stroke="rgba(255,255,255,0.5)" stroke-width="1" fill="none">
+        <rect x="0" y="0" width="200" height="200"/>
+        <rect x="200" y="0" width="200" height="200"/>
+        <rect x="400" y="0" width="200" height="200"/>
+        <rect x="0" y="200" width="200" height="200"/>
+        <rect x="200" y="200" width="200" height="200"/>
+        <rect x="400" y="200" width="200" height="200"/>
+      </g>
+
+      <!-- Labels -->
+      <text x="100" y="80" text-anchor="middle" fill="#333" font-weight="bold" font-size="13">Blast Furnace 1</text>
+      <text x="100" y="100" text-anchor="middle" fill="#333" font-size="11">NORMAL  20%</text>
+      <text x="300" y="80" text-anchor="middle" fill="#fff" font-weight="bold" font-size="13">Coke Oven Battery 3</text>
+      <text x="300" y="100" text-anchor="middle" fill="#faa" font-size="11">EXTREME  100%</text>
+      <text x="500" y="80" text-anchor="middle" fill="#333" font-weight="bold" font-size="13">Chemical Storage A</text>
+      <text x="500" y="100" text-anchor="middle" fill="#333" font-size="11">NORMAL  0%</text>
+      <text x="100" y="280" text-anchor="middle" fill="#333" font-weight="bold" font-size="13">Maintenance Workshop</text>
+      <text x="100" y="300" text-anchor="middle" fill="#333" font-size="11">NORMAL  14%</text>
+      <text x="300" y="280" text-anchor="middle" fill="#333" font-weight="bold" font-size="13">Main Control Room</text>
+      <text x="300" y="300" text-anchor="middle" fill="#333" font-size="11">NORMAL  0%</text>
+      <text x="500" y="280" text-anchor="middle" fill="#333" font-weight="bold" font-size="13">Utility & Services</text>
+      <text x="500" y="300" text-anchor="middle" fill="#333" font-size="11">NORMAL  0%</text>
+
+      <!-- Arrows showing gradient direction -->
+      <defs>
+        <marker id="arrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+          <path d="M0,0 L8,3 L0,6" fill="rgba(255,255,255,0.5)"/>
+        </marker>
+      </defs>
+      <!-- Arrow from Coke Oven into Blast Furnace -->
+      <line x1="205" y1="100" x2="120" y2="100" stroke="rgba(255,255,255,0.4)" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+      <text x="155" y="130" text-anchor="middle" fill="rgba(255,255,255,0.5)" font-size="9">bleed fades →</text>
+      <!-- Arrow from Coke Oven into Chemical Storage -->
+      <line x1="395" y1="100" x2="480" y2="100" stroke="rgba(255,255,255,0.4)" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+      <text x="445" y="130" text-anchor="middle" fill="rgba(255,255,255,0.5)" font-size="9">← bleed fades</text>
+      <!-- Arrow from Coke Oven into Main Control -->
+      <line x1="300" y1="195" x2="300" y2="270" stroke="rgba(255,255,255,0.4)" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+      <text x="340" y="240" text-anchor="start" fill="rgba(255,255,255,0.5)" font-size="9">bleed fades ↓</text>
+    </svg>
+  </div>
+</div>
+
+</body>
+</html>

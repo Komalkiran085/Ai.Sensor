@@ -4,10 +4,11 @@ type Props = {
   zone: string
   report: string
   loading: boolean
+  upgrading?: boolean
   onClose: () => void
 }
 
-export default function ReportModal({ zone, report, loading, onClose }: Props) {
+export default function ReportModal({ zone, report, loading, upgrading, onClose }: Props) {
   return (
     <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-8" onClick={onClose}>
       <div className="bg-gray-900 border border-gray-700 rounded-2xl max-w-3xl w-full max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
@@ -24,12 +25,24 @@ export default function ReportModal({ zone, report, loading, onClose }: Props) {
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
-              <span className="ml-3 text-gray-400">AI generating incident report...</span>
+              <span className="ml-3 text-gray-400">Generating report...</span>
             </div>
           ) : (
-            <div className="prose prose-invert prose-sm max-w-none whitespace-pre-wrap text-gray-300 leading-relaxed">
-              {report}
-            </div>
+            <>
+              {/* The report shown below is already real and complete (a deterministic
+                  template, generated instantly) — this is a quiet upgrade-in-progress
+                  note, never a blocker, since a full AI rewrite can take well over a
+                  minute on this local model and must never hold up reading the report. */}
+              {upgrading && (
+                <div className="flex items-center gap-2 text-xs text-blue-300 bg-blue-950/40 border border-blue-900/50 rounded-lg px-3 py-2 mb-4">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                  Refining this report with AI in the background — this version is already complete and accurate.
+                </div>
+              )}
+              <div className="prose prose-invert prose-sm max-w-none whitespace-pre-wrap text-gray-300 leading-relaxed">
+                {report}
+              </div>
+            </>
           )}
         </div>
       </div>

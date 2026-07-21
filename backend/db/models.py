@@ -209,6 +209,10 @@ class Action(Base):
     executed_by: Mapped[str] = mapped_column(String(200), default="")
     executed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Auto-generated in the background the moment an evacuate_zone action is confirmed —
+    # see main.py's confirm_action — rather than requiring a separate manual "Generate
+    # Report" click after the fact, the way /api/report/{zone_id} still works for any zone.
+    incident_report: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class EvidenceRecord(Base):

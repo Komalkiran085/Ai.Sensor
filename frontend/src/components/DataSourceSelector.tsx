@@ -1,4 +1,4 @@
-import { Radio, FileUp, X } from 'lucide-react'
+import { Radio, FileUp, Database, X } from 'lucide-react'
 import clsx from 'clsx'
 import { useEffect, useRef, useState } from 'react'
 
@@ -45,8 +45,10 @@ export default function DataSourceSelector({ apiBase }: { apiBase: string }) {
   }
 
   return (
-    <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 flex items-center gap-3 flex-wrap">
-      <span className="text-xs text-gray-400 font-semibold uppercase whitespace-nowrap">Data Source</span>
+    <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 flex items-center gap-2 flex-wrap">
+      <span title="Data Source" className="shrink-0">
+        <Database className="w-4 h-4 text-gray-500" />
+      </span>
 
       <div className="flex gap-1.5">
         <button

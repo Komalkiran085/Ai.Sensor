@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useWebSocket } from './hooks/useWebSocket'
 import { Reading } from './lib/readings'
 import PlantMap from './components/PlantMap'
@@ -17,6 +17,7 @@ import ConfigurationPage from './components/ConfigurationPage'
 import DataSourceSelector from './components/DataSourceSelector'
 import CompliancePanel from './components/CompliancePanel'
 import PendingActions from './components/PendingActions'
+import PrecautionWatch from './components/PrecautionWatch'
 import AuditPage from './components/AuditPage'
 import StatsBar from './components/StatsBar'
 
@@ -44,11 +45,40 @@ export type ZoneMeta = {
   sensors: { id: string; type: string; unit: string }[]
 }
 
+export type IncidentMatch = {
+  type: 'incident' | 'near_miss'
+  id: number
+  zone_id: string
+  date: string | null
+  description: string
+  severity?: string
+  reported_by?: string
+  root_cause?: string
+  distance?: number
+}
+
+export type ComplianceCitation = {
+  source: string
+  clause_ref: string
+  content: string
+  distance?: number
+  precaution_eligible?: boolean
+}
+
 export type ZoneRisk = {
   zone_id: string
   zone_name: string
   readings: Reading[]
-  risk: { compound_score: number; severity: string; contributing_factors: string[]; lead_time_minutes: number | null }
+  risk: {
+    compound_score: number
+    severity: string
+    contributing_factors: string[]
+    lead_time_minutes: number | null
+    agent_outputs?: {
+      incident?: { matches: IncidentMatch[]; score: number; retrieval: string } | null
+      compliance?: { citations: ComplianceCitation[]; score: number; retrieval: string } | null
+    }
+  }
   shift: any
   permits: any[]
 }
@@ -87,6 +117,8 @@ export default function App() {
   const [reportZone, setReportZone] = useState<string | null>(null)
   const [report, setReport] = useState<string>('')
   const [reportLoading, setReportLoading] = useState(false)
+  const [reportUpgrading, setReportUpgrading] = useState(false)
+  const reportRequestIdRef = useRef<string | null>(null)
   const [scenarioActive, setScenarioActive] = useState(false)
   const [scenarioZone, setScenarioZone] = useState('')
   const [trendZone, setTrendZone] = useState('')
@@ -143,6 +175,14 @@ export default function App() {
       }),
       subscribe('action_confirmed', ({ id }: { id: number }) => {
         setPendingActions(prev => prev.filter(a => a.id !== id))
+      }),
+      subscribe('report_upgraded', ({ request_id, report }: { request_id: string; report: string }) => {
+        // The modal already shows the instant fallback report; swap in the AI-generated
+        // version if/when it finishes, but only if this is still the report being viewed.
+        if (reportRequestIdRef.current === request_id) {
+          setReport(report)
+          setReportUpgrading(false)
+        }
       }),
     ]
     return () => unsubs.forEach(u => u())
@@ -210,10 +250,18 @@ export default function App() {
   const openReport = useCallback(async (zoneId: string) => {
     setReportZone(zoneId)
     setReportLoading(true)
+    setReportUpgrading(false)
+    reportRequestIdRef.current = null
     try {
       const res = await fetch(`${API}/api/report/${zoneId}`, { method: 'POST' })
       const data = await res.json()
+      // The backend returns a real (deterministic) report instantly and upgrades it
+      // in the background if AI generation succeeds — never block the modal on that.
       setReport(data.report)
+      if (data.upgrading && data.request_id) {
+        reportRequestIdRef.current = data.request_id
+        setReportUpgrading(true)
+      }
     } catch {
       setReport('Failed to generate report.')
     }
@@ -266,8 +314,9 @@ export default function App() {
           {view === 'audit' ? (
             <AuditPage zones={zones} apiBase={API} />
           ) : view === 'alerts' ? (
-            <div className="h-full overflow-auto p-4">
+            <div className="h-full overflow-auto p-4 space-y-4">
               <AlertFeed alerts={alerts} />
+              <PrecautionWatch zoneRisks={zoneRisks} zones={zones} onZoneClick={(zoneId) => { setTrendZone(zoneId); openReport(zoneId); setView('dashboard') }} compact />
             </div>
           ) : view === 'config' ? (
             <ConfigurationPage zones={zones} />
@@ -299,6 +348,7 @@ export default function App() {
           <div className="col-span-4 space-y-4">
             <ComparisonPanel zoneRisks={zoneRisks} />
             <PendingActions actions={pendingActions} onConfirm={confirmAction} apiBase={API} />
+            <PrecautionWatch zoneRisks={zoneRisks} zones={zones} onZoneClick={(zoneId) => { setTrendZone(zoneId); openReport(zoneId) }} />
             <SensorFeed zoneRisks={zoneRisks} />
             <PermitPanel permits={permits} onSuspend={suspendPermit} />
           </div>
@@ -319,6 +369,7 @@ export default function App() {
           zone={zones[reportZone]?.name || reportZone}
           report={report}
           loading={reportLoading}
+          upgrading={reportUpgrading}
           onClose={() => setReportZone(null)}
         />
       )}

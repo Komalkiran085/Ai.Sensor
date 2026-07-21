@@ -162,8 +162,10 @@ Generate a structured incident report with sections:
 Format in markdown. Keep under 500 words."""
 
     text = await _generate(prompt, max_tokens=800)
-    if text is not None:
-        return text
+    return text if text is not None else immediate_incident_report(zone_name, risk_data, readings)
+
+
+def immediate_incident_report(zone_name: str, risk_data: dict, readings: list[dict]) -> str:
     return f"# Incident Report\n\nZone: {zone_name}\nScore: {risk_data['compound_score']}\n\n{immediate_alert_text(zone_name, risk_data, readings)}"
 
 

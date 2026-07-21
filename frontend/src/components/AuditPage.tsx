@@ -1,8 +1,9 @@
 import { Fragment, useEffect, useState, useCallback } from 'react'
-import { Download, ChevronDown, ChevronRight, ShieldCheck, Clock, FileSearch } from 'lucide-react'
+import { Download, ChevronDown, ChevronRight, ShieldCheck, Clock, FileSearch, FileText } from 'lucide-react'
 import clsx from 'clsx'
 import { ZoneMeta } from '../App'
 import EvidenceModal from './EvidenceModal'
+import ReportModal from './ReportModal'
 
 type AuditAction = {
   id: number
@@ -12,6 +13,7 @@ type AuditAction = {
   executed_by: string
   executed_at: string | null
   evidence_id: number | null
+  has_incident_report: boolean
 }
 
 type AuditRow = {
@@ -52,6 +54,34 @@ export default function AuditPage({ zones, apiBase }: { zones: Record<string, Zo
   const [severityFilter, setSeverityFilter] = useState('')
   const [expanded, setExpanded] = useState<number | null>(null)
   const [viewingEvidence, setViewingEvidence] = useState<number | null>(null)
+  const [viewingReport, setViewingReport] = useState<{ actionId: number; zoneName: string } | null>(null)
+  const [reportText, setReportText] = useState('')
+  const [reportLoading, setReportLoading] = useState(false)
+
+  useEffect(() => {
+    if (!viewingReport) return
+    let cancelled = false
+    const poll = () => {
+      fetch(`${apiBase}/api/actions/${viewingReport.actionId}/incident-report`)
+        .then(r => r.json())
+        .then(data => {
+          if (cancelled) return
+          if (data.report) {
+            setReportText(data.report)
+            setReportLoading(false)
+          }
+        })
+        .catch(() => {})
+    }
+    setReportText('')
+    setReportLoading(true)
+    poll()
+    // Generation runs in the background (asyncio.create_task in main.py) — this page
+    // has no live WebSocket wiring of its own, so a short poll is the honest way to
+    // notice when it's ready rather than pretending it's instant.
+    const id = setInterval(poll, 3000)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [viewingReport, apiBase])
 
   const load = useCallback(() => {
     setLoading(true)
@@ -215,14 +245,24 @@ export default function AuditPage({ zones, apiBase }: { zones: Record<string, Zo
                         {r.action?.executed_at && (
                           <p className="text-gray-500">Executed at: {formatTime(r.action.executed_at)}</p>
                         )}
-                        {r.action?.evidence_id != null && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setViewingEvidence(r.action!.evidence_id) }}
-                            className="flex items-center gap-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition"
-                          >
-                            <FileSearch className="w-3.5 h-3.5" /> View preserved evidence
-                          </button>
-                        )}
+                        <div className="flex gap-2">
+                          {r.action?.evidence_id != null && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setViewingEvidence(r.action!.evidence_id) }}
+                              className="flex items-center gap-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition"
+                            >
+                              <FileSearch className="w-3.5 h-3.5" /> View preserved evidence
+                            </button>
+                          )}
+                          {r.action?.action_type === 'evacuate_zone' && r.action.status === 'executed' && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setViewingReport({ actionId: r.action!.id, zoneName: r.zone_name }) }}
+                              className="flex items-center gap-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition"
+                            >
+                              <FileText className="w-3.5 h-3.5" /> View incident report
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   )}
@@ -235,6 +275,15 @@ export default function AuditPage({ zones, apiBase }: { zones: Record<string, Zo
 
       {viewingEvidence != null && (
         <EvidenceModal evidenceId={viewingEvidence} apiBase={apiBase} onClose={() => setViewingEvidence(null)} />
+      )}
+
+      {viewingReport && (
+        <ReportModal
+          zone={viewingReport.zoneName}
+          report={reportText}
+          loading={reportLoading}
+          onClose={() => setViewingReport(null)}
+        />
       )}
     </div>
   )

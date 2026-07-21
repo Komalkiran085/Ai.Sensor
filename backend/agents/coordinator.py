@@ -5,19 +5,23 @@ of one scoring function: each specialist below only ever sees its own slice of t
 from __future__ import annotations
 
 
-def combine(gas: dict, permit: dict, shift: dict, compliance: dict | None = None, incident: dict | None = None) -> dict:
+def combine(
+    gas: dict, permit: dict, shift: dict, compliance: dict | None = None, incident: dict | None = None,
+    equipment: dict | None = None, proximity: dict | None = None,
+) -> dict:
     gas_score = gas["score"]
     permit_score = permit["score"]
     shift_score = shift["score"]
+    equipment_score = equipment["score"] if equipment else 0.0
 
     if gas_score == 0 and permit_score == 0:
         compound = 0.0
     elif gas_score > 0 and permit_score > 0:
         # Multiplicative boost when both gas AND permit risk are present at once —
         # this is the actual "compound" in compound risk.
-        compound = min(1.0, gas_score * 0.5 + permit_score * 0.3 + shift_score + gas_score * permit_score * 0.3)
+        compound = min(1.0, gas_score * 0.5 + permit_score * 0.3 + shift_score + equipment_score + gas_score * permit_score * 0.3)
     else:
-        compound = gas_score * 0.6 + permit_score * 0.2 + shift_score
+        compound = gas_score * 0.6 + permit_score * 0.2 + shift_score + equipment_score
 
     if compliance and compliance.get("score"):
         compound = min(1.0, compound + compliance["score"] * 0.1)
@@ -27,6 +31,15 @@ def combine(gas: dict, permit: dict, shift: dict, compliance: dict | None = None
     # an alert on its own (the gas==0 and permit==0 branch above already forced 0.0).
     if incident and incident.get("score"):
         compound = min(1.0, compound + incident["score"] * 0.1)
+
+    # A hazardous permit next to an already-elevated adjacent zone is a stronger,
+    # more specific signal than the compliance/incident nudges above — this is the
+    # exact cross-zone pattern the Digital Permit Intelligence capability is named for
+    # (and this project's own seeded battery_3 incident's actual root cause), so it
+    # carries a heavier weight. Still can't fire on its own: it requires an active
+    # hazardous permit in THIS zone, which already means permit_score > 0 above.
+    if proximity and proximity.get("score"):
+        compound = min(1.0, compound + proximity["score"] * 0.25)
 
     if compound >= 0.8:
         severity = "extreme"
@@ -38,6 +51,8 @@ def combine(gas: dict, permit: dict, shift: dict, compliance: dict | None = None
         severity = "normal"
 
     contributing_factors = list(gas["details"]) + list(permit["details"]) + list(shift["details"])
+    if equipment:
+        contributing_factors += list(equipment["details"])
     if compliance:
         contributing_factors += list(compliance["details"])
     if incident and incident.get("matches"):
@@ -52,6 +67,8 @@ def combine(gas: dict, permit: dict, shift: dict, compliance: dict | None = None
                 f"Similar past {label} ({closest.get('date', 'undated')}, {closest['zone_id']}): "
                 f"{closest['description'][:100]}…"
             )
+    if proximity:
+        contributing_factors += list(proximity["details"])
 
     return {
         "compound_score": round(compound, 3),
@@ -64,6 +81,8 @@ def combine(gas: dict, permit: dict, shift: dict, compliance: dict | None = None
             "shift": shift,
             "compliance": compliance,
             "incident": incident,
+            "equipment": equipment,
+            "proximity": proximity,
         },
     }
 

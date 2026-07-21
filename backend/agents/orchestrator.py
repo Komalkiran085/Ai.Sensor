@@ -13,9 +13,11 @@ from sqlalchemy import select
 from agents.automation import proposes_action, requires_confirmation
 from agents.compliance_agent import ComplianceAgent
 from agents.coordinator import combine, compliance_query_text
+from agents.equipment_agent import EquipmentAgent
 from agents.gas_agent import GasAgent
 from agents.incident_agent import IncidentAgent
 from agents.permit_agent import PermitAgent
+from agents.proximity_agent import ProximityAgent
 from agents.shift_agent import ShiftAgent
 from ai.alert_generator import generate_alert_explanation, generate_incident_report, immediate_alert_text
 from connectors.base import PermitAdapter, SCADAAdapter, ShiftAdapter
@@ -57,11 +59,29 @@ class Orchestrator:
         self.shift_agent = ShiftAgent()
         self.compliance_agent = ComplianceAgent(embedder) if cfg.agents.compliance_agent else None
         self.incident_agent = IncidentAgent(embedder) if cfg.agents.incident_agent else None
+        self.equipment_agent = EquipmentAgent()
+        self.proximity_agent = ProximityAgent()
+
+        # Static for the life of the process — zone layout doesn't change at runtime,
+        # so this is computed once rather than recomputed every tick.
+        self.adjacency = cfg.compute_adjacency()
+        self.zone_names = {z.id: z.name for z in cfg.zones}
 
         self._running = False
         self._last_alert: dict[str, dict] = {}  # zone_id -> {"severity": str, "time": float}
         self._last_reminder_sent: dict[int, float] = {}  # action_id -> time.time()
         self.zone_risks: dict[str, dict] = {}
+        # asyncio only weakly references a task once nothing else holds it — for a
+        # background job that can run well over a minute (Ollama enrichment on CPU),
+        # that's a real risk of it being garbage collected mid-flight. This set holds a
+        # strong reference until the task finishes, then its done-callback removes it.
+        self._background_tasks: set[asyncio.Task] = set()
+
+    def _fire_and_forget(self, coro) -> asyncio.Task:
+        task = asyncio.create_task(coro)
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+        return task
 
     async def run(self):
         self._running = True
@@ -88,18 +108,32 @@ class Orchestrator:
             await self._sync_permits(session, await self.permits.get_active_permits())
             await self._check_pending_reminders(session)
 
+            # First pass: persist this tick's readings and assess gas risk for every
+            # zone up front. The Proximity Agent needs every OTHER zone's gas score
+            # already computed before it can check a given zone's neighbors, so gas
+            # assessment can't happen lazily inside the same per-zone loop that uses it.
+            gas_by_zone: dict[str, dict] = {}
+            permits_by_zone: dict[str, list[dict]] = {}
             for zone_cfg in self.cfg.zones:
                 readings = readings_by_zone.get(zone_cfg.id, [])
-
                 for r in readings:
                     session.add(SensorReading(sensor_id=r["sensor_id"], zone_id=zone_cfg.id, value=r["value"]))
                 await session.flush()  # so the Gas Agent's trend query sees this tick's readings
 
-                permits = await self.permits.get_permits_for_zone(zone_cfg.id)
+                permits_by_zone[zone_cfg.id] = await self.permits.get_permits_for_zone(zone_cfg.id)
+                gas_by_zone[zone_cfg.id] = await self.gas_agent.assess(session, zone_cfg, readings)
 
-                gas_out = await self.gas_agent.assess(session, zone_cfg, readings)
+            for zone_cfg in self.cfg.zones:
+                readings = readings_by_zone.get(zone_cfg.id, [])
+                permits = permits_by_zone[zone_cfg.id]
+                gas_out = gas_by_zone[zone_cfg.id]
+
                 permit_out = self.permit_agent.assess(permits)
                 shift_out = self.shift_agent.assess(shift)
+                equipment_out = await self.equipment_agent.assess(session, zone_cfg.id)
+                proximity_out = self.proximity_agent.assess(
+                    zone_cfg.id, permit_out, gas_by_zone, self.adjacency, self.zone_names,
+                )
 
                 query_text = compliance_query_text(gas_out, permit_out)
 
@@ -111,7 +145,7 @@ class Orchestrator:
                 if self.incident_agent:
                     incident_out = await self.incident_agent.assess(session, query_text)
 
-                risk = combine(gas_out, permit_out, shift_out, compliance_out, incident_out)
+                risk = combine(gas_out, permit_out, shift_out, compliance_out, incident_out, equipment_out, proximity_out)
 
                 risk_row = RiskAssessment(
                     zone_id=zone_cfg.id,
@@ -198,7 +232,7 @@ class Orchestrator:
         if risk["severity"] in ("critical", "extreme"):
             await send_alert_notification(zone_cfg.name, risk["severity"], explanation, risk["compound_score"])
 
-        asyncio.create_task(self._enrich_alert(alert_row.id, zone_cfg.name, risk, readings))
+        self._fire_and_forget(self._enrich_alert(alert_row.id, zone_cfg.name, risk, readings))
 
         if not proposes_action(risk["severity"]):
             return

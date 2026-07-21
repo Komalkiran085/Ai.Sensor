@@ -117,6 +117,30 @@ class PlantConfig(BaseModel):
     def zone(self, zone_id: str) -> ZoneConfig | None:
         return next((z for z in self.zones if z.id == zone_id), None)
 
+    def compute_adjacency(self, threshold: float = 90.0) -> dict[str, list[str]]:
+        """Which zones are physically close enough that a hazard in one could plausibly
+        affect the other — derived from each zone's own boundary coordinates rather than
+        a separately hand-maintained adjacency list, so any plant.config.yaml (any layout)
+        gets this for free, the same reasoning as the heatmap deriving its row/column
+        structure from zone positions instead of a hardcoded grid. Vertex-to-vertex
+        minimum distance is a fine approximation of true edge distance for the
+        rectangular/near-circular shapes real plant zones tend to be drawn as."""
+        def min_distance(a: list[list[float]], b: list[list[float]]) -> float:
+            return min(
+                ((ax - bx) ** 2 + (ay - by) ** 2) ** 0.5
+                for ax, ay in a for bx, by in b
+            )
+
+        adjacency: dict[str, list[str]] = {z.id: [] for z in self.zones}
+        for i, za in enumerate(self.zones):
+            for zb in self.zones[i + 1:]:
+                if not za.boundary or not zb.boundary:
+                    continue
+                if min_distance(za.boundary, zb.boundary) <= threshold:
+                    adjacency[za.id].append(zb.id)
+                    adjacency[zb.id].append(za.id)
+        return adjacency
+
 
 def load_plant_config(path: str | Path = "plant.config.yaml") -> PlantConfig:
     text = Path(path).read_text()

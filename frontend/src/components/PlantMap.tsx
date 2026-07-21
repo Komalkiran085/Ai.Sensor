@@ -1,10 +1,27 @@
 import { useMemo } from 'react'
+import { Flame, ShieldAlert, Zap, Wrench, Search, History } from 'lucide-react'
 import { ZoneRisk, ZoneMeta, WorkerLocation } from '../App'
 
 const WORKER_DOT = '#0a0a0a' // solid black dots — presence markers, distinct from the heat gradient
 
 const SEVERITY_LABEL: Record<string, string> = {
   extreme: 'Extreme', critical: 'Critical', warning: 'Warning', normal: 'Normal',
+}
+
+// Static per-zone hazard rating, independent of live risk severity — the heat gradient
+// already conveys "how dangerous is it right now"; this conveys "how dangerous is this
+// kind of zone by nature," a fixed dot rather than something that competes with the
+// color-coded tile for attention.
+const HAZARD_COLOR: Record<string, string> = { high: '#fb7185', medium: '#fbbf24', low: '#94a3b8' }
+
+// One icon per permit work type — an active hazardous permit overlaid directly on the
+// zone it's in, not just buried in a side panel list.
+const PERMIT_ICON: Record<string, typeof Flame> = {
+  hot_work: Flame,
+  confined_space_entry: ShieldAlert,
+  electrical_isolation: Zap,
+  general_maintenance: Wrench,
+  inspection: Search,
 }
 
 // Multi-stop heat gradient (green -> light yellow -> gold -> orange -> red), rather than a
@@ -127,7 +144,15 @@ export default function PlantMap({
       const risk = zoneRisks[z.zone_id]
       const score = risk?.risk?.compound_score ?? 0
       const severity = risk?.risk?.severity || 'normal'
-      return { zone: z, cx, cy, score, severity, bbox: polygonBBox(z.boundary) }
+      const activePermit = (risk?.permits ?? []).find((p: any) => p.status === 'active') ?? null
+      // Same backend-owned gate PrecautionWatch uses (incident.score / compliance
+      // precaution_eligible are only ever nonzero for a genuinely close vector match) —
+      // this badge just mirrors that judgment on the map, it never re-derives it.
+      const ao = risk?.risk?.agent_outputs
+      const hasPrecaution = Boolean(
+        (ao?.incident?.score ?? 0) > 0 || ao?.compliance?.citations?.some((c: any) => c.precaution_eligible)
+      )
+      return { zone: z, cx, cy, score, severity, activePermit, hasPrecaution, bbox: polygonBBox(z.boundary) }
     })
 
     // Zone ownership is a straight-line partition, not a shape-traced one: cluster zones
@@ -350,8 +375,32 @@ export default function PlantMap({
                 className="absolute pointer-events-none flex flex-col items-center -translate-x-1/2"
                 style={{ left: `${leftPct}%`, top: `${topPct}%`, marginTop: 4 }}
               >
-                <span className="text-[11px] font-extrabold leading-tight text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.95)] text-center whitespace-nowrap">
-                  {zi.zone.name}
+                <span className="flex items-center gap-1">
+                  <span
+                    className="w-1.5 h-1.5 rounded-full shrink-0 border border-black/40"
+                    style={{ backgroundColor: HAZARD_COLOR[zi.zone.hazard_classification] || HAZARD_COLOR.low }}
+                    title={`Hazard classification: ${zi.zone.hazard_classification}`}
+                  />
+                  <span className="text-[11px] font-extrabold leading-tight text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.95)] text-center whitespace-nowrap">
+                    {zi.zone.name}
+                  </span>
+                  {zi.activePermit && (() => {
+                    const Icon = PERMIT_ICON[zi.activePermit.work_type] || Wrench
+                    return (
+                      <span className="bg-black/60 rounded-full p-0.5 pointer-events-auto" title={`Active permit: ${zi.activePermit.permit_id} (${zi.activePermit.work_type.replace(/_/g, ' ')})`}>
+                        <Icon className="w-2.5 h-2.5 text-amber-300" />
+                      </span>
+                    )
+                  })()}
+                  {zi.hasPrecaution && (
+                    <span
+                      className="bg-black/60 rounded-full p-0.5 pointer-events-auto cursor-pointer"
+                      title="Precaution: current conditions resemble a past incident/near-miss or regulation match — see Precaution Watch"
+                      onClick={() => onZoneClick(zi.zone.zone_id)}
+                    >
+                      <History className="w-2.5 h-2.5 text-blue-300" />
+                    </span>
+                  )}
                 </span>
                 <span className="flex items-center gap-1 mt-0.5">
                   <span className="text-[8.5px] font-bold uppercase tracking-wider text-white/95 bg-black/50 rounded px-1 py-0.5">
@@ -380,6 +429,19 @@ export default function PlantMap({
           <div className="w-px h-3" />
           <div className="w-3.5 h-3.5 rounded-full border-2 border-white/80 bg-slate-800 flex items-center justify-center text-[7px] font-bold text-white">A</div>
           <span className="text-[9px] text-gray-400 text-center leading-tight">Worker<br />present</span>
+          <div className="w-px h-3" />
+          <div className="flex gap-1">
+            {(['high', 'medium', 'low'] as const).map(h => (
+              <span key={h} className="w-1.5 h-1.5 rounded-full border border-black/40" style={{ backgroundColor: HAZARD_COLOR[h] }} title={`${h} hazard classification`} />
+            ))}
+          </div>
+          <span className="text-[9px] text-gray-400 text-center leading-tight">Hazard<br />class</span>
+          <div className="w-px h-3" />
+          <Flame className="w-3 h-3 text-amber-300" />
+          <span className="text-[9px] text-gray-400 text-center leading-tight">Active<br />permit</span>
+          <div className="w-px h-3" />
+          <History className="w-3 h-3 text-blue-300" />
+          <span className="text-[9px] text-gray-400 text-center leading-tight">Precaution<br />match</span>
         </div>
       </div>
     </div>

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import uuid
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timezone
 
@@ -9,13 +10,14 @@ from sqlalchemy import select, desc, and_, update
 
 from agents.compliance_checks import run_compliance_checks
 from agents.orchestrator import Orchestrator
+from ai.alert_generator import generate_incident_report, immediate_incident_report
 from bootstrap import bootstrap
 from connectors.csv_replay import CSVFormatError, CSVReplaySCADAAdapter, parse_csv_steps
 from connectors.registry import (
     build_permit_adapter, build_scada_adapter, build_shift_adapter, build_worker_location_adapter,
 )
 from db.database import async_session, init_db
-from db.models import Action, Alert, EvidenceRecord, Incident, NearMiss, Permit, Regulation, RiskAssessment
+from db.models import Action, Alert, Equipment, EvidenceRecord, Incident, NearMiss, Permit, Regulation, RiskAssessment
 from embeddings.local import LocalEmbedder
 from knowledge.seed_incidents import INCIDENTS, NEAR_MISSES
 from knowledge.seed_regulations import REGULATIONS
@@ -24,6 +26,21 @@ from ws.manager import manager
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
+
+# asyncio only holds a WEAK reference to a task once nothing else references it — for
+# a long-running background job (incident report generation can take well over a
+# minute against a CPU-only local LLM) that's a real risk of the task getting garbage
+# collected mid-flight, not a theoretical one. This set holds a strong reference until
+# the task finishes, then the done-callback removes it.
+_background_tasks: set[asyncio.Task] = set()
+
+
+def _fire_and_forget(coro) -> asyncio.Task:
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+    return task
+
 
 plant_cfg: PlantConfig | None = None
 orchestrator: Orchestrator | None = None
@@ -140,6 +157,36 @@ async def get_zones():
 @app.get("/api/sensors")
 async def get_sensors():
     return await scada_adapter.get_readings()
+
+
+VALID_EQUIPMENT_STATUSES = {"operational", "under_maintenance", "faulty", "offline"}
+
+
+@app.get("/api/equipment")
+async def get_equipment():
+    async with async_session() as session:
+        result = await session.execute(select(Equipment))
+        return [
+            {"id": e.id, "zone_id": e.zone_id, "type": e.type, "maintenance_status": e.maintenance_status}
+            for e in result.scalars().all()
+        ]
+
+
+@app.post("/api/equipment/{equipment_id}/status")
+async def set_equipment_status(equipment_id: str, status: str):
+    """Demo/testing control — a real deployment would sync this from an actual CMMS,
+    not take it as a direct API write. Lets the Equipment Agent's live scoring
+    (agents/equipment_agent.py) actually be exercised without one."""
+    if status not in VALID_EQUIPMENT_STATUSES:
+        raise HTTPException(status_code=400, detail=f"status must be one of {sorted(VALID_EQUIPMENT_STATUSES)}")
+    async with async_session() as session:
+        eq = await session.get(Equipment, equipment_id)
+        if not eq:
+            return {"error": "Equipment not found"}
+        eq.maintenance_status = status
+        await session.commit()
+    await manager.broadcast("equipment_status_changed", {"equipment_id": equipment_id, "status": status})
+    return {"equipment_id": equipment_id, "status": status}
 
 
 @app.get("/api/datasource")
@@ -323,6 +370,7 @@ async def get_audit_trail(
                     "executed_by": action.executed_by,
                     "executed_at": action.executed_at.isoformat() if action.executed_at else None,
                     "evidence_id": evidence_id,
+                    "has_incident_report": bool(action.incident_report),
                 } if action else None),
             })
         return rows
@@ -403,10 +451,44 @@ async def confirm_action(action_id: int, confirmed_by: str = "safety_officer"):
         action.human_confirmed = True
         action.executed_by = confirmed_by
         action.executed_at = datetime.now(timezone.utc)
+        is_evacuation = action.action_type == "evacuate_zone"
+        zone_id = alert.zone_id if alert else None
         await session.commit()
 
     await manager.broadcast("action_confirmed", {"id": action_id, "action_type": action.action_type})
+
+    if is_evacuation and zone_id:
+        # An evacuation shouldn't wait on LLM generation to actually happen — same
+        # non-blocking reasoning as alert enrichment. The report becomes available a
+        # short while after confirmation instead of requiring a separate manual
+        # "Generate Report" click for this specific zone/moment.
+        _fire_and_forget(_generate_incident_report_bg(action_id, zone_id))
+
     return {"status": "executed", "action_id": action_id}
+
+
+async def _generate_incident_report_bg(action_id: int, zone_id: str) -> None:
+    try:
+        report = await orchestrator.generate_report(zone_id)
+    except Exception:
+        logger.exception("Incident report generation failed for action %s", action_id)
+        return
+    async with async_session() as session:
+        action = await session.get(Action, action_id)
+        if action is None:
+            return
+        action.incident_report = report
+        await session.commit()
+    await manager.broadcast("incident_report_ready", {"action_id": action_id})
+
+
+@app.get("/api/actions/{action_id}/incident-report")
+async def get_incident_report(action_id: int):
+    async with async_session() as session:
+        action = await session.get(Action, action_id)
+        if not action:
+            return {"error": "Action not found"}
+        return {"action_id": action_id, "report": action.incident_report}
 
 
 @app.get("/api/shift")
@@ -416,8 +498,28 @@ async def get_shift():
 
 @app.post("/api/report/{zone_id}")
 async def generate_report(zone_id: str):
-    report = await orchestrator.generate_report(zone_id)
-    return {"zone_id": zone_id, "report": report}
+    """Same non-blocking reasoning as alert enrichment: on this CPU-only setup a full
+    ~800-token report can take well over a minute, and a modal that just spins for that
+    long reads as broken. Return a real report INSTANTLY (the deterministic template),
+    then upgrade it in place in the background if the AI generation succeeds."""
+    zone_data = orchestrator.zone_risks.get(zone_id)
+    if not zone_data:
+        return {"zone_id": zone_id, "report": "No data available for this zone yet."}
+
+    zone_name, risk, readings = zone_data["zone_name"], zone_data["risk"], zone_data["readings"]
+    fallback = immediate_incident_report(zone_name, risk, readings)
+    request_id = f"{zone_id}-{uuid.uuid4().hex[:8]}"
+    _fire_and_forget(_upgrade_report_bg(request_id, zone_id, zone_name, risk, readings))
+    return {"zone_id": zone_id, "report": fallback, "request_id": request_id, "upgrading": True}
+
+
+async def _upgrade_report_bg(request_id: str, zone_id: str, zone_name: str, risk: dict, readings: list) -> None:
+    try:
+        report = await generate_incident_report(zone_name, risk, readings)
+    except Exception:
+        logger.exception("On-demand report upgrade failed for %s", request_id)
+        return
+    await manager.broadcast("report_upgraded", {"request_id": request_id, "zone_id": zone_id, "report": report})
 
 
 # ── Demo scenario triggers (only meaningful with the simulated SCADA adapter) ────
@@ -460,17 +562,27 @@ async def reset_demo():
             .returning(Action.id)
         )
         cancelled_ids = [row[0] for row in result.all()]
+
+        result = await session.execute(
+            update(Equipment).where(Equipment.maintenance_status != "operational")
+            .values(maintenance_status="operational").returning(Equipment.id)
+        )
+        restored_equipment_ids = [row[0] for row in result.all()]
+
         await session.commit()
 
     for permit_id in reactivated_ids:
         await manager.broadcast("permit_status_changed", {"permit_id": permit_id, "status": "active"})
     for action_id in cancelled_ids:
         await manager.broadcast("action_confirmed", {"id": action_id, "action_type": "cancelled"})
+    for equipment_id in restored_equipment_ids:
+        await manager.broadcast("equipment_status_changed", {"equipment_id": equipment_id, "status": "operational"})
 
     return {
         "message": "Scenario reset — normal operations",
         "permits_reactivated": len(reactivated_ids),
         "actions_cancelled": len(cancelled_ids),
+        "equipment_restored": len(restored_equipment_ids),
     }
 
 

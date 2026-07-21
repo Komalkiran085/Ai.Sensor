@@ -23,6 +23,12 @@ logger = logging.getLogger(__name__)
 
 _STOPWORDS = {"the", "a", "an", "in", "of", "to", "and", "or", "for", "is", "on", "at", "safety", "conditions", "readings"}
 
+# Cosine distance beyond which a regulation "match" isn't actually close enough to
+# surface as a precaution — mirrors incident_agent.py's SIMILARITY_CUTOFF exactly, same
+# reasoning: only vector search gives a distance worth gating on; a keyword-fallback hit
+# has no ranking, so it never counts as precaution-eligible, only as a citation.
+COMPLIANCE_SIMILARITY_CUTOFF = 0.5
+
 
 def _keywords(text: str) -> list[str]:
     words = re.findall(r"[a-zA-Z]+", text.lower())
@@ -37,7 +43,7 @@ class ComplianceAgent:
         if not query_text:
             return {"agent": "compliance", "score": 0.0, "details": [], "citations": [], "retrieval": "none"}
 
-        matches: list[Regulation] | None = None
+        matches: list[tuple[Regulation, float | None]] | None = None
         retrieval = "vector"
         if self.embedder:
             try:
@@ -48,9 +54,18 @@ class ComplianceAgent:
 
         if matches is None:
             retrieval = "keyword"
-            matches = await self._keyword_search(session, pack, query_text, top_k)
+            matches = [(m, None) for m in await self._keyword_search(session, pack, query_text, top_k)]
 
-        citations = [{"source": m.source, "clause_ref": m.clause_ref, "content": m.content} for m in matches]
+        citations = []
+        for m, dist in matches:
+            # Only a real vector-search distance under cutoff earns "precaution" status —
+            # a keyword hit (dist is None) or a weak vector match still cites the clause,
+            # it just never claims the elevated confidence a precaution implies.
+            eligible = retrieval == "vector" and dist is not None and dist < COMPLIANCE_SIMILARITY_CUTOFF
+            citations.append({
+                "source": m.source, "clause_ref": m.clause_ref, "content": m.content,
+                "distance": dist, "precaution_eligible": eligible,
+            })
         details = [f"{c['clause_ref']}: {c['content'][:90]}…" for c in citations]
 
         # A matching clause is itself informative — there's a documented rule this
@@ -58,15 +73,14 @@ class ComplianceAgent:
         score = 0.2 if citations else 0.0
         return {"agent": "compliance", "score": score, "details": details, "citations": citations, "retrieval": retrieval}
 
-    async def _vector_search(self, session: AsyncSession, pack: str, query_text: str, top_k: int) -> list[Regulation]:
+    async def _vector_search(self, session: AsyncSession, pack: str, query_text: str, top_k: int) -> list[tuple[Regulation, float]]:
         query_vec = await asyncio.to_thread(self.embedder.embed_query, query_text)
         result = await session.execute(
-            select(Regulation)
+            select(Regulation, Regulation.embedding.cosine_distance(query_vec).label("dist"))
             .where(Regulation.pack == pack, Regulation.embedding.is_not(None))
-            .order_by(Regulation.embedding.cosine_distance(query_vec))
-            .limit(top_k)
+            .order_by("dist").limit(top_k)
         )
-        return list(result.scalars().all())
+        return [(reg, dist) for reg, dist in result.all()]
 
     async def _keyword_search(self, session: AsyncSession, pack: str, query_text: str, top_k: int) -> list[Regulation]:
         terms = _keywords(query_text)

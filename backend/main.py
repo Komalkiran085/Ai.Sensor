@@ -3,13 +3,14 @@ import logging
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timezone
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, HTTPException, Response, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select, desc, and_, update
 
 from agents.compliance_checks import run_compliance_checks
 from agents.orchestrator import Orchestrator
 from bootstrap import bootstrap
+from connectors.csv_replay import CSVFormatError, CSVReplaySCADAAdapter, parse_csv_steps
 from connectors.registry import (
     build_permit_adapter, build_scada_adapter, build_shift_adapter, build_worker_location_adapter,
 )
@@ -31,6 +32,10 @@ permit_adapter = None
 shift_adapter = None
 worker_location_adapter = None
 embedder = LocalEmbedder()
+
+# Kept so "switch back to Simulation" restores the original adapter instance rather
+# than reconstructing a fresh one (which would reset any in-progress demo scenario).
+_simulated_scada_adapter = None
 
 
 async def seed_knowledge(pack: str) -> None:
@@ -75,6 +80,7 @@ async def seed_incident_history() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global plant_cfg, orchestrator, scada_adapter, permit_adapter, shift_adapter, worker_location_adapter
+    global _simulated_scada_adapter
 
     await init_db()
     plant_cfg = await bootstrap()
@@ -82,6 +88,7 @@ async def lifespan(app: FastAPI):
     await seed_incident_history()
 
     scada_adapter = build_scada_adapter(plant_cfg)
+    _simulated_scada_adapter = scada_adapter
     permit_adapter = build_permit_adapter(plant_cfg)
     shift_adapter = build_shift_adapter(plant_cfg)
     worker_location_adapter = build_worker_location_adapter(plant_cfg, permit_adapter)
@@ -124,6 +131,7 @@ async def get_zones():
             "name": z.name,
             "hazard_classification": z.hazard_classification,
             "boundary": z.boundary,
+            "sensors": [{"id": s.id, "type": s.type, "unit": s.unit} for s in z.sensors],
         }
         for z in plant_cfg.zones
     }
@@ -132,6 +140,61 @@ async def get_zones():
 @app.get("/api/sensors")
 async def get_sensors():
     return await scada_adapter.get_readings()
+
+
+@app.get("/api/datasource")
+async def get_datasource():
+    if isinstance(scada_adapter, CSVReplaySCADAAdapter):
+        return {
+            "source": "csv",
+            "filename": scada_adapter.filename,
+            "step": scada_adapter.current_step,
+            "steps": scada_adapter.step_count,
+        }
+    return {"source": "simulation"}
+
+
+@app.post("/api/datasource/csv")
+async def upload_csv_datasource(file: UploadFile = File(...)):
+    """Swaps live sensor data over to an uploaded historical export. The rest of the
+    pipeline (permits, shift, compliance/incident RAG) is untouched — only where
+    readings come from changes."""
+    global scada_adapter
+    raw = await file.read()
+    try:
+        steps = parse_csv_steps(raw, plant_cfg.zones)
+    except CSVFormatError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    adapter = CSVReplaySCADAAdapter(steps, plant_cfg.zones, file.filename or "upload.csv")
+    scada_adapter = adapter
+    orchestrator.scada = adapter
+    return {"source": "csv", "filename": adapter.filename, "steps": adapter.step_count}
+
+
+@app.post("/api/datasource/simulation")
+async def switch_to_simulation():
+    global scada_adapter
+    scada_adapter = _simulated_scada_adapter
+    orchestrator.scada = _simulated_scada_adapter
+    return {"source": "simulation"}
+
+
+@app.get("/api/datasource/sample-csv")
+async def sample_csv_template():
+    """A column-format reference, not a demo scenario — generated live from this
+    plant's actual zones/sensors so it's always a valid upload, never a stale example
+    that drifts from whatever plant.config.yaml currently defines."""
+    lines = ["timestamp,zone_id,sensor_id,sensor_type,value"]
+    ts = "2026-01-01T00:00:00Z"
+    for zone in plant_cfg.zones:
+        for s in zone.sensors:
+            lines.append(f"{ts},{zone.id},{s.id},{s.type},{round(s.thresholds.warning * 0.5, 1)}")
+    return Response(
+        content="\n".join(lines) + "\n",
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=sample_sensor_data.csv"},
+    )
 
 
 @app.get("/api/permits")

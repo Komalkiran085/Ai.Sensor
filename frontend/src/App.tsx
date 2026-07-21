@@ -10,9 +10,10 @@ import DemoControls from './components/DemoControls'
 import ReportModal from './components/ReportModal'
 import Header from './components/Header'
 
-type View = 'dashboard' | 'audit' | 'alerts'
+type View = 'dashboard' | 'audit' | 'alerts' | 'config'
 import TrendChart from './components/TrendChart'
 import ComparisonPanel from './components/ComparisonPanel'
+import ConfigurationPage from './components/ConfigurationPage'
 import DataSourceSelector from './components/DataSourceSelector'
 import CompliancePanel from './components/CompliancePanel'
 import PendingActions from './components/PendingActions'
@@ -40,6 +41,7 @@ export type ZoneMeta = {
   name: string
   hazard_classification: string
   boundary: number[][]
+  sensors: { id: string; type: string; unit: string }[]
 }
 
 export type ZoneRisk = {
@@ -113,7 +115,10 @@ export default function App() {
     const unsubs = [
       subscribe('zone_risks', (data: Record<string, ZoneRisk>) => setZoneRisks(data)),
       subscribe('alert', (data: Alert) => {
-        setAlerts(prev => [data, ...prev].slice(0, 50))
+        // Guards against the same broadcast landing twice — e.g. React StrictMode
+        // briefly holding two WebSocket connections open during dev-mode remount,
+        // both delivering the one message — rather than trusting delivery is exactly-once.
+        setAlerts(prev => prev.some(a => a.id === data.id) ? prev : [data, ...prev].slice(0, 50))
         if (data.severity === 'critical' || data.severity === 'extreme') {
           playBeep(data.severity)
         }
@@ -132,7 +137,9 @@ export default function App() {
         setAlerts(prev => prev.map(a => a.id === id ? { ...a, explanation } : a))
       }),
       subscribe('action_proposed', (data: PendingAction) => {
-        setPendingActions(prev => [data, ...prev])
+        // Same duplicate-delivery guard as 'alert' above — this is the exact bug that
+        // showed two identical "Notify supervisor" cards for one real pending action.
+        setPendingActions(prev => prev.some(a => a.id === data.id) ? prev : [data, ...prev])
       }),
       subscribe('action_confirmed', ({ id }: { id: number }) => {
         setPendingActions(prev => prev.filter(a => a.id !== id))
@@ -244,6 +251,14 @@ export default function App() {
             <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
             <span className="text-[10px] leading-none">Alerts</span>
           </button>
+          <button
+            onClick={() => setView('config')}
+            className={`flex flex-col items-center gap-1 p-2 rounded-lg transition w-12 ${view === 'config' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'}`}
+            title="Configuration"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+            <span className="text-[10px] leading-none">Config</span>
+          </button>
         </aside>
 
         {/* Main Content */}
@@ -254,6 +269,8 @@ export default function App() {
             <div className="h-full overflow-auto p-4">
               <AlertFeed alerts={alerts} />
             </div>
+          ) : view === 'config' ? (
+            <ConfigurationPage zones={zones} />
           ) : (
           <main className="max-w-[1600px] mx-auto p-4 space-y-4">
         <StatsBar zoneRisks={zoneRisks} alerts={alerts} permits={permits} />
@@ -269,7 +286,7 @@ export default function App() {
             onTriggerNamed={(zoneId) => triggerScenario(zoneId)}
             onReset={resetDemo}
           />
-          <DataSourceSelector />
+          <DataSourceSelector apiBase={API} />
           <ShiftInfo shift={shift} />
         </div>
 

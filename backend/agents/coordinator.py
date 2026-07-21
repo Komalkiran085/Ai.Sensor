@@ -22,6 +22,12 @@ def combine(gas: dict, permit: dict, shift: dict, compliance: dict | None = None
     if compliance and compliance.get("score"):
         compound = min(1.0, compound + compliance["score"] * 0.1)
 
+    # A close match to real past history is itself evidence, the same reasoning as the
+    # compliance nudge above — weighted so it can move the needle but never manufacture
+    # an alert on its own (the gas==0 and permit==0 branch above already forced 0.0).
+    if incident and incident.get("score"):
+        compound = min(1.0, compound + incident["score"] * 0.1)
+
     if compound >= 0.8:
         severity = "extreme"
     elif compound >= 0.6:
@@ -35,12 +41,17 @@ def combine(gas: dict, permit: dict, shift: dict, compliance: dict | None = None
     if compliance:
         contributing_factors += list(compliance["details"])
     if incident and incident.get("matches"):
-        closest = incident["matches"][0]
-        label = "incident" if closest["type"] == "incident" else "near-miss"
-        contributing_factors.append(
-            f"Similar past {label} ({closest.get('date', 'undated')}, {closest['zone_id']}): "
-            f"{closest['description'][:100]}…"
-        )
+        # Vector search always returns a "closest" result even when nothing is truly
+        # similar, so gate on score there; a keyword-fallback hit is a real substring
+        # match on its own (no ranking to gate by), so it always surfaces.
+        is_vector = incident.get("retrieval") == "vector"
+        if not is_vector or incident.get("score"):
+            closest = incident["matches"][0]
+            label = "incident" if closest["type"] == "incident" else "near-miss"
+            contributing_factors.append(
+                f"Similar past {label} ({closest.get('date', 'undated')}, {closest['zone_id']}): "
+                f"{closest['description'][:100]}…"
+            )
 
     return {
         "compound_score": round(compound, 3),

@@ -1,40 +1,104 @@
-import { Database, Radio, FileUp } from 'lucide-react'
+import { Radio, FileUp, X } from 'lucide-react'
 import clsx from 'clsx'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
-const SOURCES = [
-  { id: 'simulation', label: 'Simulation', icon: Radio, desc: 'Scripted demo data', active: true },
-  { id: 'opcua', label: 'OPC-UA', icon: Database, desc: 'SCADA integration', active: false },
-  { id: 'csv', label: 'CSV Upload', icon: FileUp, desc: 'Historical data', active: false },
-]
+type DataSourceState = { source: 'simulation' } | { source: 'csv'; filename: string; step: number; steps: number }
 
-export default function DataSourceSelector() {
-  const [selected, setSelected] = useState('simulation')
+export default function DataSourceSelector({ apiBase }: { apiBase: string }) {
+  const [state, setState] = useState<DataSourceState>({ source: 'simulation' })
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const fileInput = useRef<HTMLInputElement>(null)
+
+  const refresh = () => {
+    fetch(`${apiBase}/api/datasource`).then(r => r.json()).then(setState).catch(() => {})
+  }
+
+  useEffect(() => {
+    refresh()
+    // Step count only moves forward on the backend's own tick, so poll rather than
+    // wait on a websocket event for what's a low-stakes progress readout.
+    const id = setInterval(refresh, 5000)
+    return () => clearInterval(id)
+  }, [])
+
+  const switchToSimulation = async () => {
+    setError(null)
+    await fetch(`${apiBase}/api/datasource/simulation`, { method: 'POST' })
+    refresh()
+  }
+
+  const handleFile = async (file: File) => {
+    setUploading(true)
+    setError(null)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      const res = await fetch(`${apiBase}/api/datasource/csv`, { method: 'POST', body: form })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail || 'Upload failed')
+      setState(data)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Upload failed')
+    }
+    setUploading(false)
+  }
 
   return (
-    <div className="bg-gray-900 rounded-xl border border-gray-800 p-3 flex items-center gap-3">
-      <span className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Data Source</span>
-      <div className="flex gap-1">
-        {SOURCES.map(s => (
-          <button
-            key={s.id}
-            onClick={() => s.active && setSelected(s.id)}
-            className={clsx(
-              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition',
-              selected === s.id
-                ? 'bg-blue-600 text-white'
-                : s.active
-                  ? 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-                  : 'bg-gray-800/50 text-gray-600 cursor-not-allowed'
-            )}
-            title={s.desc}
-          >
-            <s.icon className="w-3 h-3" />
-            {s.label}
-            {!s.active && <span className="text-[8px] bg-gray-700 px-1 rounded">Soon</span>}
-          </button>
-        ))}
+    <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 flex items-center gap-3 flex-wrap">
+      <span className="text-xs text-gray-400 font-semibold uppercase whitespace-nowrap">Data Source</span>
+
+      <div className="flex gap-1.5">
+        <button
+          onClick={switchToSimulation}
+          className={clsx(
+            'flex items-center gap-1.5 text-xs font-medium px-2 py-2 rounded-lg transition',
+            state.source === 'simulation' ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-gray-700 hover:bg-gray-600 text-white'
+          )}
+          title="Scripted demo data"
+        >
+          <Radio className="w-3.5 h-3.5" />
+          Simulation
+        </button>
+
+        <button
+          onClick={() => fileInput.current?.click()}
+          disabled={uploading}
+          className={clsx(
+            'flex items-center gap-1.5 text-xs font-medium px-2 py-2 rounded-lg transition',
+            state.source === 'csv' ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-gray-700 hover:bg-gray-600 text-white',
+            uploading && 'opacity-60 cursor-wait'
+          )}
+          title="Replay sensor readings from an uploaded CSV"
+        >
+          <FileUp className="w-3.5 h-3.5" />
+          {uploading ? 'Uploading…' : 'CSV Upload'}
+        </button>
+        <input
+          ref={fileInput}
+          type="file"
+          accept=".csv"
+          className="hidden"
+          onChange={e => {
+            const file = e.target.files?.[0]
+            if (file) handleFile(file)
+            e.target.value = ''
+          }}
+        />
       </div>
+
+      {state.source === 'csv' && (
+        <span className="text-xs text-gray-400 whitespace-nowrap">
+          {state.filename} — step {state.step % state.steps + 1}/{state.steps}
+        </span>
+      )}
+
+      {error && (
+        <div className="flex items-start gap-1.5 text-xs text-red-400 bg-red-900/20 border border-red-900/50 rounded px-2 py-1.5 w-full">
+          <span className="flex-1">{error}</span>
+          <button onClick={() => setError(null)}><X className="w-3.5 h-3.5" /></button>
+        </div>
+      )}
     </div>
   )
 }

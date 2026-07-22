@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { ShieldAlert, Check, FileSearch } from 'lucide-react'
+import { ShieldAlert, ShieldCheck, Check, FileSearch } from 'lucide-react'
+import clsx from 'clsx'
 import { PendingAction } from '../App'
 import EvidenceModal from './EvidenceModal'
 
@@ -17,17 +18,28 @@ const ACTION_LABELS: Record<string, string> = {
 
 export default function PendingActions({ actions, onConfirm, apiBase }: Props) {
   const [viewingEvidence, setViewingEvidence] = useState<number | null>(null)
-
-  if (actions.length === 0) return null
+  const isEmpty = actions.length === 0
 
   return (
-    <div className="bg-red-950/40 rounded-xl border border-red-700 p-4">
+    <div className={clsx(
+      'rounded-xl border p-4',
+      // Always rendered — a card that pops in/out of the layout depending on live data
+      // is exactly the kind of shifting-page-height issue this dashboard keeps running
+      // into. Colors still carry meaning: red only when something is actually pending.
+      isEmpty ? 'bg-gray-900 border-gray-800' : 'bg-red-950/40 border-red-700'
+    )}>
       <div className="flex items-center gap-2 mb-3">
-        <ShieldAlert className="w-4 h-4 text-red-400" />
-        <h2 className="text-sm font-semibold text-red-300 uppercase tracking-wider">
+        {isEmpty
+          ? <ShieldCheck className="w-4 h-4 text-green-500" />
+          : <ShieldAlert className="w-4 h-4 text-red-400" />}
+        <h2 className={clsx('text-sm font-semibold uppercase tracking-wider', isEmpty ? 'text-gray-300' : 'text-red-300')}>
           Awaiting your confirmation
         </h2>
       </div>
+
+      {isEmpty ? (
+        <p className="text-gray-500 text-sm">No actions awaiting confirmation — all clear.</p>
+      ) : (
       <div className="space-y-2">
         {actions.map(a => (
           <div key={a.id} className="flex items-center justify-between bg-gray-900/60 border border-red-800 rounded-lg p-2.5">
@@ -57,6 +69,7 @@ export default function PendingActions({ actions, onConfirm, apiBase }: Props) {
           </div>
         ))}
       </div>
+      )}
 
       {viewingEvidence != null && (
         <EvidenceModal evidenceId={viewingEvidence} apiBase={apiBase} onClose={() => setViewingEvidence(null)} />

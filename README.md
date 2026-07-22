@@ -19,8 +19,8 @@ SafetyAI is a **compound risk detection engine** that fuses multiple data stream
 - **Compound Risk Detection Engine** — Five specialist agents (Gas, Permit, Shift, Compliance, and a Coordinator that combines them) genuinely reason over separate slices of the data instead of one scoring function
 - **Trend-based lead time** — the Gas Agent estimates minutes-to-threshold from the actual recent trend in each sensor's readings, not just whether it's over the line right now
 - **Geospatial Safety Heatmap** — Real-time plant map, laid out from `plant.config.yaml`, not hardcoded
-- **AI-Powered Alerts** — Claude or a local model (Qwen2.5, via Ollama) generates natural language explanations and reports; switch between them with `LLM_PROVIDER` — no cloud dependency required
-- **Alerts never wait on AI** — a safety alert fires instantly with deterministic text, then upgrades in place once the AI explanation is ready, so a slower local model can never delay the actual notification
+- **AI-Powered Alerts** — Claude generates natural language explanations and reports
+- **Alerts never wait on AI** — a safety alert fires instantly with deterministic text, then upgrades in place once the Claude explanation is ready, so API latency can never delay the actual notification
 - **Compliance Agent (RAG)** — retrieves actual regulation clauses relevant to what's happening, instead of an LLM guessing citations from memory
 - **Human-in-the-loop actions** — state-changing actions (suspend a permit, evacuate) are proposed automatically but require one click to confirm; everything else is fully automatic
 - **Single-Sensor vs Compound Comparison** — Proves the system catches what traditional monitoring misses
@@ -50,7 +50,7 @@ SCADA / Permit / Shift systems  →  Connector adapters (connectors/)
 |-------|-----------|---------|
 | Frontend | React + Vite + Tailwind | Enterprise dashboard UI |
 | Backend | FastAPI (Python) | Async API + WebSocket |
-| AI (generation) | Claude API, or Qwen2.5 3B via Ollama (local) | Alert explanations + incident reports — `LLM_PROVIDER=auto\|claude\|ollama` |
+| AI (generation) | Claude API | Alert explanations + incident reports |
 | AI (retrieval) | BAAI/bge-small-en-v1.5 (local, via sentence-transformers) | Real embeddings for the Compliance and Incident agents |
 | Database | PostgreSQL + TimescaleDB + pgvector | Sensor history, permits/zones, regulation embeddings — one instance (see docs/SYSTEM_DESIGN.md §2) |
 | Deployment | Docker Compose | One-command startup |

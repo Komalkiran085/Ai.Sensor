@@ -2,21 +2,12 @@ import asyncio
 import logging
 
 import anthropic
-import httpx
 
 from config import get_settings
 
 logger = logging.getLogger(__name__)
 
 CLAUDE_MODEL = "claude-sonnet-4-20250514"
-
-# Ollama's default server config processes one request at a time (OLLAMA_NUM_PARALLEL=1).
-# If several zones alert in the same tick, firing all their Ollama calls concurrently
-# just means later ones sit in Ollama's internal queue while their OWN httpx timeout is
-# already counting down — easy to time out through no fault of that particular request.
-# Gating dispatch through this semaphore means only one call is in flight from our side
-# at a time, so each request's timeout window starts when it actually begins running.
-_OLLAMA_SEMAPHORE = asyncio.Semaphore(1)
 
 
 def _readings_text(readings: list[dict]) -> str:
@@ -48,9 +39,8 @@ def _similar_incidents_text(risk_data: dict) -> str:
     return "\n".join(lines)
 
 
-# ── Provider dispatch — "auto" tries Claude then falls back to the local model;
-# "claude"/"ollama" force one explicitly. Neither call ever raises; a failure just
-# means the caller falls back to the static template. ──────────────────────────────
+# Neither call ever raises; a failure just means the caller falls back to the
+# static template. ──────────────────────────────────────────────────────────────
 
 async def _call_claude(prompt: str, max_tokens: int) -> str | None:
     settings = get_settings()
@@ -69,40 +59,8 @@ async def _call_claude(prompt: str, max_tokens: int) -> str | None:
         return None
 
 
-async def _call_ollama(prompt: str) -> str | None:
-    settings = get_settings()
-    try:
-        async with _OLLAMA_SEMAPHORE:
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                response = await client.post(
-                    f"{settings.OLLAMA_URL}/api/chat",
-                    json={
-                        "model": settings.OLLAMA_MODEL,
-                        "messages": [{"role": "user", "content": prompt}],
-                        "stream": False,
-                    },
-                )
-                response.raise_for_status()
-                return response.json()["message"]["content"]
-    except Exception:
-        logger.exception("Local Ollama generation failed")
-        return None
-
-
 async def _generate(prompt: str, max_tokens: int) -> str | None:
-    provider = get_settings().LLM_PROVIDER
-
-    if provider == "claude":
-        return await _call_claude(prompt, max_tokens)
-    if provider == "ollama":
-        return await _call_ollama(prompt)
-
-    # "auto": prefer Claude (faster, higher quality) when a key is configured,
-    # otherwise use the local model — never the static template if either AI path works.
-    text = await _call_claude(prompt, max_tokens)
-    if text is not None:
-        return text
-    return await _call_ollama(prompt)
+    return await _call_claude(prompt, max_tokens)
 
 
 async def generate_alert_explanation(zone_name: str, risk_data: dict, readings: list[dict]) -> str:

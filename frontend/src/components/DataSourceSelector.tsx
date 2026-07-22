@@ -91,7 +91,7 @@ export default function DataSourceSelector({ apiBase }: { apiBase: string }) {
 
       {state.source === 'csv' && (
         <span className="text-xs text-gray-400 whitespace-nowrap">
-          {state.filename} — step {state.step % state.steps + 1}/{state.steps}
+          {state.step % state.steps + 1}/{state.steps}
         </span>
       )}
 

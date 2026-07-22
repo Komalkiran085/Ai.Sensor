@@ -25,7 +25,7 @@ export default function TrendChart({ zoneRisks, selectedZone }: { zoneRisks: Rec
   }, [zoneRisks, selectedZone])
 
   return (
-    <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
+    <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 h-full flex flex-col">
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">
           Trend — {selectedZone.replace(/_/g, ' ')}
@@ -36,7 +36,7 @@ export default function TrendChart({ zoneRisks, selectedZone }: { zoneRisks: Rec
           <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-cyan-500" /> Risk %</span>
         </div>
       </div>
-      <ResponsiveContainer width="100%" height={180}>
+      <ResponsiveContainer width="100%" height="100%" minHeight={180} className="flex-1">
         <LineChart data={history}>
           <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
           <XAxis dataKey="time" tick={{ fontSize: 9, fill: '#64748b' }} interval="preserveStartEnd" />

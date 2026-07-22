@@ -289,6 +289,7 @@ export default function PlantMap({
         <span className="text-[10px] text-gray-600 uppercase tracking-wider">{zoneList.length} zones</span>
       </div>
 
+      <div className="flex flex-col gap-4">
       <div className="flex gap-4">
         <div className="relative flex-1 rounded-md overflow-hidden border border-black/50" style={{ height: 380 }}>
           <svg
@@ -415,34 +416,46 @@ export default function PlantMap({
           })}
         </div>
 
-        {/* Legend — continuous gradient bar (since color is now driven by score, blended
-            spatially) plus the worker-dot marker */}
+        {/* Risk gradient — flex-1 so it stretches to fill the row's full cross-size,
+            which the flex row already sizes to the map's 380px height (its sibling
+            here has no explicit height, so it only stretches to its own fixed-height
+            content, i.e. 160px, unless the bar itself is told to fill the rest). */}
         <div className="flex flex-col items-center gap-2 pt-1 w-14">
           <span className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 text-center">Risk</span>
           <div
-            className="w-4 rounded"
-            style={{ height: 160, background: GRADIENT_CSS }}
+            className="w-4 rounded flex-1 min-h-0"
+            style={{ background: GRADIENT_CSS }}
           />
           <div className="flex flex-col items-center text-[8px] text-gray-500 -mt-1">
             <span>High</span>
           </div>
-          <div className="w-px h-3" />
+        </div>
+      </div>
+
+      {/* Marker legend — a horizontal strip spanning the full card width below the
+          map, instead of cramming into the narrow vertical column beside it. */}
+      <div className="flex items-center justify-center gap-8 pt-3 border-t border-gray-800">
+        <div className="flex items-center gap-2">
           <div className="w-3.5 h-3.5 rounded-full border-2 border-white/80 bg-slate-800 flex items-center justify-center text-[7px] font-bold text-white">A</div>
-          <span className="text-[9px] text-gray-400 text-center leading-tight">Worker<br />present</span>
-          <div className="w-px h-3" />
+          <span className="text-[10px] text-gray-400">Worker present</span>
+        </div>
+        <div className="flex items-center gap-2">
           <div className="flex gap-1">
             {(['high', 'medium', 'low'] as const).map(h => (
               <span key={h} className="w-1.5 h-1.5 rounded-full border border-black/40" style={{ backgroundColor: HAZARD_COLOR[h] }} title={`${h} hazard classification`} />
             ))}
           </div>
-          <span className="text-[9px] text-gray-400 text-center leading-tight">Hazard<br />class</span>
-          <div className="w-px h-3" />
-          <Flame className="w-3 h-3 text-amber-300" />
-          <span className="text-[9px] text-gray-400 text-center leading-tight">Active<br />permit</span>
-          <div className="w-px h-3" />
-          <History className="w-3 h-3 text-blue-300" />
-          <span className="text-[9px] text-gray-400 text-center leading-tight">Precaution<br />match</span>
+          <span className="text-[10px] text-gray-400">Hazard class</span>
         </div>
+        <div className="flex items-center gap-2">
+          <Flame className="w-3 h-3 text-amber-300" />
+          <span className="text-[10px] text-gray-400">Active permit</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <History className="w-3 h-3 text-blue-300" />
+          <span className="text-[10px] text-gray-400">Precaution match</span>
+        </div>
+      </div>
       </div>
     </div>
   )

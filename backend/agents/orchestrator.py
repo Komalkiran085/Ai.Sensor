@@ -24,6 +24,8 @@ from connectors.base import PermitAdapter, SCADAAdapter, ShiftAdapter
 from db.database import async_session
 from db.models import Action, Alert, EvidenceRecord, Permit, RiskAssessment, SensorReading
 from embeddings.base import Embedder
+from notifications.telegram import send_telegram_alert
+from notifications.voice_call import send_alert_call
 from notifications.webhook import send_alert_notification
 from plant_config import PlantConfig
 from ws.manager import manager
@@ -72,8 +74,8 @@ class Orchestrator:
         self._last_reminder_sent: dict[int, float] = {}  # action_id -> time.time()
         self.zone_risks: dict[str, dict] = {}
         # asyncio only weakly references a task once nothing else holds it — for a
-        # background job that can run well over a minute (Ollama enrichment on CPU),
-        # that's a real risk of it being garbage collected mid-flight. This set holds a
+        # background job that can run a while (a Claude API call), that's a real risk
+        # of it being garbage collected mid-flight. This set holds a
         # strong reference until the task finishes, then its done-callback removes it.
         self._background_tasks: set[asyncio.Task] = set()
 
@@ -231,6 +233,15 @@ class Orchestrator:
         # instant text too, for the same reason: notification speed matters more than polish.
         if risk["severity"] in ("critical", "extreme"):
             await send_alert_notification(zone_cfg.name, risk["severity"], explanation, risk["compound_score"])
+            # Backgrounded — a text push shouldn't add its own round-trip to the tick
+            # on top of the webhook call just above.
+            self._fire_and_forget(send_telegram_alert(zone_cfg.name, risk["severity"], explanation, risk["compound_score"]))
+
+        # Extreme only, and backgrounded — a phone call is disruptive enough to reserve
+        # for the top severity, and placing it shouldn't add call-setup latency to the
+        # tick loop the way the (already-awaited) webhook call above does.
+        if risk["severity"] == "extreme":
+            self._fire_and_forget(send_alert_call(zone_cfg.name, risk["severity"], explanation, risk["compound_score"]))
 
         self._fire_and_forget(self._enrich_alert(alert_row.id, zone_cfg.name, risk, readings))
 
@@ -286,8 +297,8 @@ class Orchestrator:
 
     async def _enrich_alert(self, alert_id: int, zone_name: str, risk: dict, readings: list[dict]) -> None:
         """Runs in the background, off the tick's critical path. Generates the real
-        AI explanation (Claude or the local model, per LLM_PROVIDER) and updates the
-        alert in place once ready — the alert itself already fired with instant text."""
+        AI explanation (Claude) and updates the alert in place once ready — the alert
+        itself already fired with instant text."""
         try:
             explanation = await generate_alert_explanation(zone_name, risk, readings)
         except Exception:

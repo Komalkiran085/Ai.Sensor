@@ -14,9 +14,9 @@ export default function SensorFeed({ zoneRisks }: { zoneRisks: Record<string, Zo
   const zones = Object.values(zoneRisks)
 
   return (
-    <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 max-h-[280px] overflow-y-auto">
+    <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 h-full flex flex-col">
       <h2 className="text-sm font-semibold text-gray-300 mb-3 uppercase tracking-wider">Live Sensor Feed</h2>
-      <div className="space-y-2">
+      <div className="space-y-2 flex-1 min-h-0 overflow-y-auto">
         {zones.length === 0 && <p className="text-gray-500 text-sm">Waiting for sensor data...</p>}
         {zones.map(z => {
           const sev = z.risk?.severity || 'normal'

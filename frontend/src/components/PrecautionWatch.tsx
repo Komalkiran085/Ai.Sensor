@@ -147,12 +147,19 @@ export default function PrecautionWatch({
 
   return (
     <div className={clsx('bg-gray-900 rounded-xl border border-blue-900/40', compact ? 'p-3' : 'p-4')}>
-      <div className="flex items-center gap-2 mb-3">
-        <History className="w-4 h-4 text-blue-400" />
-        <h2 className="text-sm font-semibold text-blue-300 uppercase tracking-wider">Precaution Watch</h2>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <History className="w-4 h-4 text-blue-400" />
+          <h2 className="text-sm font-semibold text-blue-300 uppercase tracking-wider">Precaution Watch</h2>
+        </div>
+        <span className="text-[10px] text-gray-500">{entries.length} {entries.length === 1 ? 'match' : 'matches'}</span>
       </div>
 
-      <div className="space-y-2">
+      {/* Capped and scrollable — this sits above Pending Actions/Sensor Feed/Permits in
+          the dashboard column, and a precaution list that could grow arbitrarily long
+          must never push the things a safety officer actually needs to act on far down
+          the page. */}
+      <div className={clsx('space-y-2 overflow-y-auto pr-1', compact ? 'max-h-64' : 'max-h-72')}>
         {entries.map(e => {
           const isHot = e.severity === 'critical' || e.severity === 'extreme'
           const longText = e.mechanism === 'incident' ? (e.description || '') : (e.content || '')

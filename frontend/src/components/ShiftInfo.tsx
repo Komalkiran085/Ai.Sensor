@@ -4,7 +4,7 @@ export default function ShiftInfo({ shift }: { shift: any }) {
   if (!shift) return null
 
   return (
-    <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 flex items-center gap-4 flex-wrap">
+    <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 flex items-center gap-4 flex-wrap flex-1 min-w-[280px]">
       <div className="flex items-center gap-2 whitespace-nowrap">
         <Clock className="w-4 h-4 text-blue-400" />
         <span className="text-sm font-semibold text-gray-300">Shift: {shift.shift_name}</span>

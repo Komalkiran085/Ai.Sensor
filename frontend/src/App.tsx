@@ -20,6 +20,7 @@ import PendingActions from './components/PendingActions'
 import PrecautionWatch from './components/PrecautionWatch'
 import AuditPage from './components/AuditPage'
 import StatsBar from './components/StatsBar'
+import { useMatchHeight } from './hooks/useMatchHeight'
 
 const WS_URL = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.hostname}:8000/ws`
 const API = `http://${window.location.hostname}:8000`
@@ -124,7 +125,12 @@ export default function App() {
   const [trendZone, setTrendZone] = useState('')
   const [demoScenarios, setDemoScenarios] = useState<DemoScenario[]>([])
   const [view, setView] = useState<View>('dashboard')
+  const [alertsTab, setAlertsTab] = useState<'alerts' | 'compliance'>('alerts')
   const [workers, setWorkers] = useState<WorkerLocation[]>([])
+  const heatmapRef = useRef<HTMLDivElement>(null)
+  const heatmapHeight = useMatchHeight(heatmapRef)
+  const trendRef = useRef<HTMLDivElement>(null)
+  const trendHeight = useMatchHeight(trendRef)
 
   const playBeep = useCallback((severity: string) => {
     try {
@@ -315,8 +321,26 @@ export default function App() {
             <AuditPage zones={zones} apiBase={API} />
           ) : view === 'alerts' ? (
             <div className="h-full overflow-auto p-4 space-y-4">
-              <AlertFeed alerts={alerts} />
-              <PrecautionWatch zoneRisks={zoneRisks} zones={zones} onZoneClick={(zoneId) => { setTrendZone(zoneId); openReport(zoneId); setView('dashboard') }} compact />
+              <div className="flex justify-center gap-2">
+                <button
+                  onClick={() => setAlertsTab('alerts')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition ${alertsTab === 'alerts' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+                >
+                  Alerts
+                </button>
+                <button
+                  onClick={() => setAlertsTab('compliance')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition ${alertsTab === 'compliance' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+                >
+                  Regulatory Compliance
+                </button>
+              </div>
+
+              {alertsTab === 'alerts' ? (
+                <AlertFeed alerts={alerts} />
+              ) : (
+                <CompliancePanel apiBase={API} />
+              )}
             </div>
           ) : view === 'config' ? (
             <ConfigurationPage zones={zones} />
@@ -339,24 +363,38 @@ export default function App() {
           <ShiftInfo shift={shift} />
         </div>
 
-        <div className="grid grid-cols-12 gap-4">
-          <div className="col-span-8 space-y-4">
+        {/* Each right-side column's height is pinned in px to its left-side partner's
+            *measured* rendered height (useMatchHeight), not CSS Grid stretch — Grid
+            only stretches the wrapper to the row's max-content height, it doesn't
+            shrink a taller sibling's own content (e.g. a long sensor list) to fit,
+            so the shorter card's card would end early and leave a visible gap. */}
+        <div className="grid grid-cols-12 gap-4 items-start">
+          <div className="col-span-8" ref={heatmapRef}>
             <PlantMap zones={zones} zoneRisks={zoneRisks} workers={workers} onZoneClick={(zoneId) => { setTrendZone(zoneId); openReport(zoneId) }} />
+          </div>
+
+          <div className="col-span-4 flex flex-col gap-4 overflow-hidden" style={{ height: heatmapHeight }}>
+            <ComparisonPanel zoneRisks={zoneRisks} />
+            <PendingActions actions={pendingActions} onConfirm={confirmAction} apiBase={API} />
+            <div className="flex-1 min-h-0">
+              <SensorFeed zoneRisks={zoneRisks} />
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-12 gap-4 items-start">
+          <div className="col-span-8" ref={trendRef}>
             <TrendChart zoneRisks={zoneRisks} selectedZone={trendZone} />
           </div>
 
-          <div className="col-span-4 space-y-4">
-            <ComparisonPanel zoneRisks={zoneRisks} />
-            <PendingActions actions={pendingActions} onConfirm={confirmAction} apiBase={API} />
-            <PrecautionWatch zoneRisks={zoneRisks} zones={zones} onZoneClick={(zoneId) => { setTrendZone(zoneId); openReport(zoneId) }} />
-            <SensorFeed zoneRisks={zoneRisks} />
+          <div className="col-span-4" style={{ height: trendHeight }}>
             <PermitPanel permits={permits} onSuspend={suspendPermit} />
           </div>
         </div>
 
         <div className="grid grid-cols-12 gap-4">
           <div className="col-span-12">
-            <CompliancePanel apiBase={API} />
+            <PrecautionWatch zoneRisks={zoneRisks} zones={zones} onZoneClick={(zoneId) => { setTrendZone(zoneId); openReport(zoneId) }} />
           </div>
         </div>
       </main>

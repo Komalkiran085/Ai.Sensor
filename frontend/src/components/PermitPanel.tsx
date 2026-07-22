@@ -8,7 +8,7 @@ type Props = {
 
 export default function PermitPanel({ permits, onSuspend }: Props) {
   return (
-    <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
+    <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 h-full">
       <h2 className="text-sm font-semibold text-gray-300 mb-3 uppercase tracking-wider">Active Permits</h2>
       <div className="space-y-2">
         {permits.length === 0 && <p className="text-gray-500 text-sm">No active permits.</p>}

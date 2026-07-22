@@ -45,7 +45,7 @@ export default function CompliancePanel({ apiBase }: { apiBase: string }) {
           <span className="bg-gray-800 text-gray-400 px-2 py-0.5 rounded-full">{data.unmonitored} unmonitored</span>
         </div>
       </div>
-      <div className="space-y-1.5 max-h-[240px] overflow-y-auto">
+      <div className="space-y-1.5 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 160px)' }}>
         {data.checks.map((c, i) => (
           <div
             key={i}

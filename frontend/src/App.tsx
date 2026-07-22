@@ -127,10 +127,8 @@ export default function App() {
   const [view, setView] = useState<View>('dashboard')
   const [alertsTab, setAlertsTab] = useState<'alerts' | 'compliance'>('alerts')
   const [workers, setWorkers] = useState<WorkerLocation[]>([])
-  const heatmapRef = useRef<HTMLDivElement>(null)
-  const heatmapHeight = useMatchHeight(heatmapRef)
-  const trendRef = useRef<HTMLDivElement>(null)
-  const trendHeight = useMatchHeight(trendRef)
+  const [heatmapRef, heatmapHeight] = useMatchHeight()
+  const [trendRef, trendHeight] = useMatchHeight()
 
   const playBeep = useCallback((severity: string) => {
     try {

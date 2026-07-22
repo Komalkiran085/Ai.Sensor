@@ -14,7 +14,7 @@ export default function Header({ connected, scenarioActive }: Props) {
         <div className="flex items-center gap-3">
           <Shield className="w-8 h-8 text-blue-400" />
           <div>
-            <h1 className="text-xl font-bold text-white tracking-tight">SafetyAI</h1>
+            <h1 className="text-xl font-bold text-white tracking-tight">AiSensor</h1>
             <p className="text-xs text-gray-400">Industrial Safety Command Centre</p>
           </div>
         </div>

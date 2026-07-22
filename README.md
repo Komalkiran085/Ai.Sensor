@@ -1,4 +1,4 @@
-# 🛡️ SafetyAI — Industrial Safety Command Centre
+# 🛡️ AiSensor — Industrial Safety Command Centre
 
 **AI-Powered Compound Risk Detection for Industrial Plants**
 
@@ -12,7 +12,7 @@ Workers die in industrial plants not because safety equipment is missing, but be
 
 ## The Solution
 
-SafetyAI is a **compound risk detection engine** that fuses multiple data streams in real-time and fires intelligent alerts when dangerous combinations are detected — even when each individual signal appears normal.
+AiSensor is a **compound risk detection engine** that fuses multiple data streams in real-time and fires intelligent alerts when dangerous combinations are detected — even when each individual signal appears normal.
 
 ### Key Features
 

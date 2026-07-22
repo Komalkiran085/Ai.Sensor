@@ -57,7 +57,7 @@ export default function ComparisonPanel({ zoneRisks }: { zoneRisks: Record<strin
             ) : (
               <ShieldCheck className="w-5 h-5 text-green-400" />
             )}
-            <span className="text-xs font-bold text-gray-300">SafetyAI Compound</span>
+            <span className="text-xs font-bold text-gray-300">AiSensor Compound</span>
           </div>
           <div className={clsx('text-2xl font-black', {
             'text-red-400': compoundSeverity === 'extreme' || compoundSeverity === 'critical',
@@ -81,7 +81,7 @@ export default function ComparisonPanel({ zoneRisks }: { zoneRisks: Record<strin
           <ArrowRight className="w-4 h-4 text-yellow-400 mt-0.5 flex-shrink-0" />
           <p className="text-[11px] text-yellow-300 leading-relaxed">
             <strong>False Negative Prevented:</strong> A traditional single-sensor system would show NO alarm at {co.toFixed(1)} ppm CO.
-            SafetyAI detected danger by combining gas readings{hasPermit ? ', active work permit' : ''}, and shift patterns — catching a risk that single-sensor monitoring completely misses.
+            AiSensor detected danger by combining gas readings{hasPermit ? ', active work permit' : ''}, and shift patterns — catching a risk that single-sensor monitoring completely misses.
           </p>
         </div>
       )}
